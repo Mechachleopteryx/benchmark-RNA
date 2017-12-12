@@ -1,0 +1,6 @@
+[submodule "benchmark-long-read-correction"]
+	path = benchmark-long-read-correction
+	url = https://github.com/kamimrcht/benchmark-long-read-correction
+[submodule "Complete-Striped-Smith-Waterman-Library"]
+	path = Complete-Striped-Smith-Waterman-Library
+	url = https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library.git
