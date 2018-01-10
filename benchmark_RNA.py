@@ -4,12 +4,12 @@ import os
 import shlex, subprocess
 from subprocess import Popen, PIPE, STDOUT
 import re
-
+import copy
 
 import seaborn as sn
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+#~ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 
 def readfasta(infile):
@@ -61,7 +61,34 @@ def simulation(sizeSkipped, relAbund, suffix, covSR = 100, covLR = 10):
 	cmdSimul = subprocessLauncher(cmdSimul)
 
 
+def msa(suffix):
+	cmdMSA = "/home/marchet/MSA_isoforms/analyze_MSAv2.py simulatedLR" + suffix + ".fa"
+	p = subprocessLauncher(cmdMSA)
+	cmdmv = "mv corrected_by_MSA.fa corrected_by_MSA" + suffix + ".fa"
+	try:
+		subprocess.check_output(['bash','-c', cmdmv])
+		cmdRm = "rm corrected_by_MSA.fa"
+		subprocess.check_output(['bash','-c', cmdRm])
 
+	except subprocess.CalledProcessError:
+		pass
+	cmdmv = "mv corrected_by_MSA0.fa corrected_by_MSA_c0" + suffix + ".fa"
+	try:
+		subprocess.check_output(['bash','-c', cmdmv])
+		cmdRm = "rm corrected_by_MSA0.fa"
+		subprocess.check_output(['bash','-c', cmdRm])
+	except subprocess.CalledProcessError:
+		pass
+	cmdmv = "mv corrected_by_MSA1.fa corrected_by_MSA_c1" + suffix + ".fa"
+	try:
+		subprocess.check_output(['bash','-c', cmdmv])
+		cmdRm = "rm corrected_by_MSA1.fa"
+		subprocess.check_output(['bash','-c', cmdRm])
+	except subprocess.CalledProcessError:
+		pass
+
+
+		
 def lordec(suffix):
 	cmdLordec = "lordec-correct -i simulatedLR" + suffix + ".fa -2 simulatedSR" + suffix + ".fa -o corrected_by_LoRDEC" + suffix + ".fa -k 21 -s 2 -T 4"
 	p = subprocessLauncher(cmdLordec)
@@ -153,9 +180,10 @@ def hgcolor(suffix):
 	p = subprocessLauncher(cmdHgc)
 
 
-def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread", "MSA"], nbSR = 100, nbLR = 10):
-	for sizeSkipped in ["10", "50", "100"]:
-		for relAbund in ["90", "75", "50"]:
+def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread", "MSA"], skipped=["10","50","100"], abund=[ "90", "75 ","50"], nbSR = 100, nbLR = 10):
+	for sizeSkipped in skipped:
+	#~ for sizeSkipped in ["10", "50", "100"]:
+		for relAbund in abund:
 	#~ for sizeSkipped in ["100"]:
 		#~ for relAbund in [ "50"]:
 			suffix = "_size_" + sizeSkipped + "_abund_" + relAbund
@@ -209,16 +237,94 @@ def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "
 
 
 # check results by aligning on the reference sequences
-def alignOnRef(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","MSA"]):
+def alignOnRef(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","MSA"],skipped=[10,50,100], abund=[ 90, 75 ,50]):
 	for soft in listCorrectors:
-		for sizeSkipped in [100, 50 ,10]:
+		for sizeSkipped in skipped:
+		#~ for sizeSkipped in [100, 50 ,10]:
+			for relAbund in abund:
 		#~ for sizeSkipped in [100]:
-			for relAbund in [50, 75, 90]:
 			#~ for relAbund in [50]:
 				suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
 				samFile = open("results" + soft + suffix + ".sam", 'w')
 				cmdAlign = "./Complete-Striped-Smith-Waterman-Library/src/ssw_test refSequences" + suffix + ".fa corrected_by_" + soft + suffix + ".fa  -c -s"
 				p = subprocessLauncher(cmdAlign, samFile)
+
+
+
+
+
+
+def alignOnRefMsa(skipped=[10,50,100], abund=[ 90, 75 ,50]):
+	switches = []
+	soft = "MSA"
+	
+	for sizeSkipped in skipped:
+	#~ for sizeSkipped in [100, 50 ,10]:
+		for relAbund in abund:
+		#~ for relAbund in [50, 75, 90]:
+			suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
+			fileNameC0 = "corrected_by_MSA_c0" + suffix + ".fa"
+			fileNameC1 = "corrected_by_MSA_c1" + suffix + ".fa"
+			isoform = None
+			clusterToIsoform = dict()
+			if (os.path.isfile(fileNameC0) and os.access(fileNameC0, os.R_OK)) or (os.path.isfile(fileNameC1) and os.access(fileNameC1, os.R_OK)):
+				c0 = open(fileNameC0, 'r')
+				c0Lines = c0.readlines()
+				prec = None
+				switch = False
+				for r in c0Lines:
+					if ">" in r:
+						isoform = r.split(">")[1].split("_")[0]
+						if prec is not None:
+							if isoform != prec:
+								switch = True
+						else:
+							prec = isoform
+				if not switch:
+					clusterToIsoform[fileNameC0] = isoform
+				c1 = open(fileNameC1, 'r')
+				c1Lines = c1.readlines()
+				prec = None
+				for r in c1Lines:
+					if ">" in r:
+						isoform = r.split(">")[1].split("_")[0]
+						if prec is not None:
+							if isoform != prec:
+								switch = True
+						else:
+							prec = isoform
+				if switch:
+					alignOnRef(["MSA"])
+					switch = False
+					#~ return 0
+					
+				else:
+					clusterToIsoform[fileNameC1] = isoform
+					for fileNameClust in clusterToIsoform.keys():
+						isoform = clusterToIsoform[fileNameClust]
+						cmdGrep = "grep "+ isoform + " refSequences" + suffix + ".fa -A 1 > refSequences" + isoform + suffix + ".fa"
+						subprocess.check_output(['bash','-c', cmdGrep])
+						cmdGrep = "grep "+ isoform + " " + fileNameClust + " -A 1 > toalign.fa"
+						subprocess.check_output(['bash','-c', cmdGrep])
+						samFile = open("results" + isoform + soft + suffix + ".sam", 'w')
+						#~ cmdAlign = "./Complete-Striped-Smith-Waterman-Library/src/ssw_test refSequences" + isoform + suffix + ".fa " + fileNameClust + " -c -s"
+						cmdAlign = "./Complete-Striped-Smith-Waterman-Library/src/ssw_test refSequences" + isoform + suffix + ".fa toalign.fa -c -s"
+						p = subprocessLauncher(cmdAlign, samFile)
+						samFile.close()
+					
+					
+					
+				cmdCat = "cat resultsinclusion" + soft + suffix + ".sam resultsexclusion" + soft + suffix + ".sam > results" + soft + suffix + ".sam"
+				subprocess.check_output(['bash','-c', cmdCat])
+			else:
+				alignOnRef(["MSA"])
+				#~ return 0
+				switch = False
+			switches.append(switch)
+	return switches
+
+
+
 
 
 def getExpectedLength(suffix):
@@ -238,7 +344,9 @@ def readSam(soft, suffix):
 	blockResults = dict()
 	lenResults = dict()
 	pathSam = "results" + soft + suffix + ".sam"
+	
 	if os.path.exists(pathSam) and os.path.getsize(pathSam) > 0:
+		print("%%%%%%%%%%%%%%%%%%%%%%%ù", pathSam)
 		samFile = open(pathSam, 'r')
 		readsSize = []
 		lines = samFile.readlines()
@@ -253,11 +361,11 @@ def readSam(soft, suffix):
 			seq = line[9]
 			readsSize.append(length)
 			blocks = re.compile("[0-9]+").split(cigar)[1:]
-			resultAln = re.compile("[A-Z]").split(cigar)[:-1]
+			resultAln = re.compile("[A-Z]|=").split(cigar)[:-1]
 			alnLength = 0
 			gapsLength = 0
 			queries[query] = seq
-			if len(blocks) == 1 and len(resultAln) == 1 and blocks[0] == 'M': #aligned in one block
+			if len(blocks) == 1 and len(resultAln) == 1 and blocks[0] == '=': #aligned in one block
 				blockResults[query] = {1:target}
 				alnLength = int(resultAln[0])
 			else:
@@ -268,9 +376,11 @@ def readSam(soft, suffix):
 						blockResults[query][len(blocks)] = target
 				
 				for b,r in zip(blocks, resultAln):
+					
 					if b != 'D' and b!= 'I':
 						alnLength += int(r)
 					else:
+						#~ print(b,r)
 						gapsLength += int(r)
 			if query not in lenResults:
 				lenResults[query] = {target:[length, alnLength -start, gapsLength]}
@@ -294,7 +404,7 @@ def getIsoform(blockResults, lenResults, suffix, queries, nbIncl, nbExcl, soft):
 	meanSizes = {"exclusion":{"realSize":[], "alignedSize":[]}, "inclusion":{"realSize":[], "alignedSize":[]}}
 	for querySeq, aln in blockResults.items():
 		#~ print("1", querySeq, aln)
-		if len(aln) == 1: # corrected read could be aligned in 1 block on one ref transcript
+		if len(aln) == 1 or len(lenResults[querySeq]) == 1: # corrected read could be aligned in 1 block on one ref transcript
 			nill, targetType = next(iter(aln.items()))
 		
 		else: #in case sequences are not aligned in one block, keep the reference linked with the smaller cumulative length of gaps
@@ -363,15 +473,22 @@ def getFileReadNumber(fileName):
 
 
 
-def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","MSA"]):
+def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","MSA"], skipped=[10,50,100], abund=[ 90, 75 ,50]):
 	out = open("corrected_to_inclusion.txt", 'w')
 	
 	out2 = open("corrected_sizes.txt", 'w')
 	out.write("corrector size_skipped_exon ratio percent\n")
 	out2.write("corrector isoform ratio percent size_skipped_exon\n")
+	outSize = open("sizes_reads.txt", 'w')
+	outSize.write("soft size skipped abund\n")
 	for soft in listCorrectors:
-		for sizeSkipped in [10,50,100]:
-			for relAbund in [ 90, 75 ,50]:
+	
+			
+		for sizeSkipped in skipped:
+		#~ for sizeSkipped in [10,50,100]:
+			for relAbund in abund:
+			#~ for relAbund in [ 90, 75 ,50]:
+		#~ for sizeSkipped in [100]:
 			#~ for relAbund in [50]:
 				
 				suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
@@ -396,6 +513,8 @@ def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PB
 					print("Corrected inclusion reads in output:", round(countIncl*100.0/(countIncl+countExcl),2) if countIncl+countExcl != 0 else 0, "%")
 					print("Corrected exclusion reads in output:", round(countExcl*100.0/(countExcl+countIncl),2) if countIncl+countExcl != 0 else 0, "%")
 					print("Mean length corrected reads:", meanReadsSize, ", mean length of inclusion reads:", meanInclusionCorrectedSize, "(", ratioLenI, "% of real size ), mean length of exclusion reads:", meanExclusionCorrectedSize, "(", ratioLenE, "% of real size )")
+					outSize.write(soft + " " + str(ratioLenI) + " " +  str(sizeSkipped) + " "+ str(relAbund) + "\n")
+					outSize.write(soft + " " + str(ratioLenE) + " " +  str(sizeSkipped) + " "+ str(relAbund) +"\n")
 					correctedToIncl = round(countIncl*100.0/(countIncl+countExcl),2) if countIncl+countExcl != 0 else 0
 					if not correctedToIncl == 0 :
 						out.write(soft + " " + str(sizeSkipped) + " " + str(relAbund) + " " + str(correctedToIncl) +"\n")
@@ -403,23 +522,125 @@ def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PB
 						out2.write(soft + " exclusion " +  str(relAbund)  + " " + str(ratioLenE) + " " + str(sizeSkipped) +"\n")
 
 					#~ ### launch corrector benchmark"
-					cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected_reads_exclusion" + suffix + ".fa -u uncorrected_reads_exclusion" + suffix + ".fa -r perfect_reads_exclusion" + suffix + ".fa"
-					subprocessLauncher(cmdBench)
-				
-				#~ cmdMv = "mv msa.fa " + soft + "exclusion_msa" + suffix + ".fa"
-				#~ subprocess.check_output(['bash','-c', cmdMv])
-				#~ cmdMv = "mv msa_profile.txt " +  soft + "exclusion_msa" + suffix + "_profile.txt"
-				#~ subprocess.check_output(['bash','-c', cmdMv])
-				#~ cmdBench = "python3 /home/marchet/benchmark-long-read-correction/benchmark.py -c corrected_reads_inclusion" + suffix + ".fa -u uncorrected_reads_inclusion" + suffix + ".fa -r perfect_reads_inclusion" + suffix + ".fa"
-				#~ subprocessLauncher(cmdBench)
-				#~ cmdMv = "mv msa.fa " + soft + "_inclusion_msa" + suffix + ".fa"
-				#~ subprocess.check_output(['bash','-c', cmdMv])
-				#~ cmdMv = "mv msa_profile.txt " +  soft + "inclusion_msa" + suffix + "_profile.txt"
-				#~ subprocess.check_output(['bash','-c', cmdMv])
+					if soft != "MSA":
+						if countExcl > 0:
+							cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected_reads_exclusion" + suffix + ".fa -u uncorrected_reads_exclusion" + suffix + ".fa -r perfect_reads_exclusion" + suffix + ".fa"
+							print("Exclusion")
+							subprocessLauncher(cmdBench)
+							cmdMv = "mv outPositions.txt outPositionsExclusion_" + soft + suffix + ".fa"
+							subprocess.check_output(['bash','-c', cmdMv])
 
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' precision.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " precision.txt >> precision_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+							
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' recall.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " recall.txt >> recall_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+							
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' correct_base_rate.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " correct_base_rate.txt >> correct_base_rate_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+							
+						if countIncl > 0:
+							cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected_reads_inclusion" + suffix + ".fa -u uncorrected_reads_inclusion" + suffix + ".fa -r perfect_reads_inclusion" + suffix + ".fa"
+							print("Inclusion")
+							subprocessLauncher(cmdBench)
+							cmdMv = "mv outPositions.txt outPositionsInclusion_" + soft + suffix + ".fa"
+							subprocess.check_output(['bash','-c', cmdMv])
 
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' precision.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " precision.txt >> precision_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+							
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' recall.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " recall.txt >> recall_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
 
-#todo : nb of reads in the output
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' correct_base_rate.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " correct_base_rate.txt >> correct_base_rate_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+					else:
+						print("Exclusion")
+						if countExcl > 0:
+							cmdHead = "head -2 corrected_reads_exclusion" + suffix + ".fa > corrected.fa"
+							subprocess.check_output(['bash','-c', cmdHead])
+							cmdHead = "head -2 uncorrected_reads_exclusion" + suffix + ".fa > uncorrected.fa"
+							subprocess.check_output(['bash','-c', cmdHead])
+							cmdHead = "head -2 perfect_reads_exclusion" + suffix + ".fa > perfect.fa"
+							subprocess.check_output(['bash','-c', cmdHead])
+							
+							cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected.fa -u uncorrected.fa -r perfect.fa"
+							
+							subprocessLauncher(cmdBench)
+							cmdMv = "mv outPositions.txt outPositionsExclusion_" + soft +  suffix + ".fa"
+							subprocess.check_output(['bash','-c', cmdMv])
+
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' precision.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " precision.txt >> precision_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+							
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' recall.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " recall.txt >> recall_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' correct_base_rate.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " correct_base_rate.txt >> correct_base_rate_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+						else:
+							print("Recall 0 Precision 0 correct_bases_rate 0")
+
+						print("Inclusion")
+						if countIncl > 0:
+							
+							cmdHead = "head -2 corrected_reads_inclusion" + suffix + ".fa > corrected.fa"
+							subprocess.check_output(['bash','-c', cmdHead])
+							cmdHead = "head -2 uncorrected_reads_inclusion" + suffix + ".fa > uncorrected.fa"
+							subprocess.check_output(['bash','-c', cmdHead])
+							cmdHead = "head -2 perfect_reads_inclusion" + suffix + ".fa > perfect.fa"
+							subprocess.check_output(['bash','-c', cmdHead])
+							
+							cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected.fa -u uncorrected.fa -r perfect.fa"
+							
+							subprocessLauncher(cmdBench)
+							cmdMv = "mv outPositions.txt outPositionsInclusion_" + soft + suffix + ".fa"
+							subprocess.check_output(['bash','-c', cmdMv])
+							
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' precision.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " precision.txt >> precision_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+							
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' recall.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " recall.txt >> recall_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+
+							cmdSed = "sed -i 's/unknown/" + soft + "/g' correct_base_rate.txt"
+							subprocess.check_output(['bash','-c', cmdSed])
+							cmdCat = "grep " + soft + " correct_base_rate.txt >> correct_base_rate_tmp.txt"
+							subprocess.check_output(['bash','-c', cmdCat])
+						else:
+							print("Recall 0 Precision 0 correct_bases_rate 0")
+	cmdMv = "mv recall_tmp.txt recall.txt"
+	subprocess.check_output(['bash','-c', cmdMv])
+	cmdMv = "mv precision_tmp.txt precision.txt"
+	subprocess.check_output(['bash','-c', cmdMv])
+
+	cmdMv = "mv correct_base_rate_tmp.txt correct_base_rate.txt"
+	subprocess.check_output(['bash','-c', cmdMv])
+
+#todo mean between inclusion and exclusion in R
+
 
 
 def simulateReads(covSR, covLR):
@@ -431,34 +652,88 @@ def simulateReads(covSR, covLR):
 			# simulation
 			simulation(sizeSkipped, relAbund, suffix, covSR, covLR)
 
-def plotResults():
+def plotResults(skipped, abund):
 	cmdR = "Rscript corrected_to_major.R corrected_to_inclusion.txt"
 	subprocessLauncher(cmdR)
+	cmdR = "Rscript corrected_to_major_self.R corrected_to_inclusion.txt"
+	subprocessLauncher(cmdR)
+	
+	cmdR = "Rscript plot_recall.R recall.txt"
+	subprocessLauncher(cmdR)
+	cmdR = "Rscript plot_precision.R precision.txt"
+	subprocessLauncher(cmdR)
+
+	cmdR = "Rscript plot_correct_base_rate.R correct_base_rate.txt"
+	subprocessLauncher(cmdR)
+
+	cmdR =  "Rscript plot_size.R sizes_reads.txt "
+	subprocessLauncher(cmdR)
+
+
+	for sizeSkipped in skipped:
+	#~ for sizeSkipped in [10,50,100]:
+			for relAbund in abund:
+		#~ for sizeSkipped in [100]:
+			#~ for relAbund in [50]:
+				
+				suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
+				cmdR = "Rscript error_frequencies_inclusion.R outPositionsInclusion_MSA" + suffix + ".fa 800 " + str(800+sizeSkipped)
+				subprocessLauncher(cmdR)
+				try:
+					cmdMv = "mv error_frequencies_by_positions.png error_frequencies_by_positionsInclusion"  + suffix + ".png"
+					subprocess.check_output(['bash','-c', cmdMv])
+				except subprocess.CalledProcessError:
+					pass
+				cmdR = "Rscript error_frequencies_exclusion.R outPositionsExclusion_MSA" + suffix + ".fa 800"
+				subprocessLauncher(cmdR)
+				try:
+					cmdMv = "mv error_frequencies_by_positions.png error_frequencies_by_positionsExclusion"  + suffix + ".png"
+					subprocess.check_output(['bash','-c', cmdMv])
+				except subprocess.CalledProcessError:
+					pass
+
 
 
 def main():
 	currentDirectory = os.path.dirname(os.path.abspath(sys.argv[0]))
 	installDirectory = os.path.dirname(os.path.realpath(__file__))
-	listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread"]
-	#~ listCorrectors = ["MSA", "daccord", "PBDagCon"]
+	#~ listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread"]
+	#~ listCorrectors = ["MSA","daccord"]
+	#~ listCorrectors = ["MSA","daccord",  "LoRMA", "MECAT", "PBDagCon"]
 	#~ listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord"]
-	#~ listCorrectors = ["LoRDEC"]
+	listCorrectors = ["MSA"]
 	#~ listCorrectors = ["Proovread"]
-	#~ listCorrectors = ["LoRMA"]
-	covSR = 10
-	covLR = 100
+	covSR = 1
+	covLR = 10
+	skipped = [100]
+	abund = [100]
+	#~ skipped = [100,50]
+	#~ abund = [75,50,90]
+	skippedS = [str(r) for r in skipped]
+	abundS = [str(r) for r in abund]
+	readsFileName = None
 	if len(sys.argv) > 1:
 		correctors = sys.argv[1]
 		if correctors != "all":
 			listCorrectors = [correctors]
 		if len(sys.argv) > 3:
-			covSR = int(sys.argv[2])
-			covLR = int(sys.argv[3])
-	simulateReads(covSR, covLR)
-	launchCorrectors(currentDirectory,listCorrectors, covSR, covLR)
-	alignOnRef(listCorrectors)
-	computeResults(listCorrectors)
-	plotResults()
+			readsFileName = argv[3]
+			if len(sys.argv) > 4:
+				covSR = int(sys.argv[4])
+				covLR = int(sys.argv[5])
+	if readsFileName is None:
+		simulateReads(covSR, covLR)
+	launchCorrectors(currentDirectory,listCorrectors, skippedS, abundS, covSR, covLR)
+	
+	if "MSA" in listCorrectors:
+		listCorrectorsCpy = copy.copy(listCorrectors)
+		listCorrectorsCpy.remove("MSA")
+		alignOnRef(listCorrectorsCpy, skipped, abund)
+		alignOnRefMsa(skipped, abund)
+	else:
+		alignOnRef(listCorrectors, skipped, abund)
+	computeResults(listCorrectors, skipped, abund)
+	plotResults(skipped, abund)
 
 if __name__ == '__main__':
 	main()
