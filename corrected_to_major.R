@@ -21,7 +21,9 @@ label_names <- c(
                     `MECAT` = "MECAT",
                     `PBDagCon` = "PBDagCon",
                     `daccord` = "daccord",
-                    `MSA` = "MSA",
+                    `msa_exon` = "msa_exon",
+                    `msa_isoform` = "msa_isoform",
+                    `msa_sparc` = "msa_sparc",
                     `colorMap` = "colorMap"
                     )
                     

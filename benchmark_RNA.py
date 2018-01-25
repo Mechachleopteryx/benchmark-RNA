@@ -10,7 +10,7 @@ import seaborn as sn
 import pandas as pd
 import numpy as np
 #~ import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
+#~ from sklearn.metrics import confusion_matrix
 
 def readfasta(infile):
     labels = []
@@ -43,7 +43,8 @@ def readfasta(infile):
 # launch subprocess
 def subprocessLauncher(cmd, argstdout=None, argstderr=None,	 argstdin=None):
 	args = shlex.split(cmd)
-	p = subprocess.Popen(args, stdin = argstdin, stdout = argstdout, stderr = argstderr).communicate()
+	#~ p = subprocess.Popen(args, stdin = argstdin, stdout = argstdout, stderr = argstderr).communicate()
+	p = subprocess.call(args, stdin = argstdin, stdout = argstdout, stderr = argstderr)
 	return p
 
 def checkWrittenFiles(files):
@@ -61,29 +62,27 @@ def simulation(sizeSkipped, relAbund, suffix, covSR = 100, covLR = 10):
 	cmdSimul = subprocessLauncher(cmdSimul)
 
 
-def msa(suffix):
-	cmdMSA = "/home/marchet/MSA_isoforms/analyze_MSAv2.py simulatedLR" + suffix + ".fa"
+def msa(suffix, msaType):
+	if msaType == "msa_isoform":
+		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py simulatedLR" + suffix + ".fa"
+	elif msaType == "msa_exon":
+		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py simulatedLR" + suffix + ".fa -c exon"
+	elif msaType == "msa_sparc":
+		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py simulatedLR" + suffix + ".fa -s True"
 	p = subprocessLauncher(cmdMSA)
-	cmdmv = "mv corrected_by_MSA.fa corrected_by_MSA" + suffix + ".fa"
+	cmdmv = "cp /home/marchet/detection-consensus-isoform/results/corrected_by_MSA.fa corrected_by_" + msaType + suffix + ".fa"
 	try:
 		subprocess.check_output(['bash','-c', cmdmv])
-		cmdRm = "rm corrected_by_MSA.fa"
-		subprocess.check_output(['bash','-c', cmdRm])
-
 	except subprocess.CalledProcessError:
 		pass
-	cmdmv = "mv corrected_by_MSA0.fa corrected_by_MSA_c0" + suffix + ".fa"
+	cmdmv = "cp  /home/marchet/detection-consensus-isoform/results/corrected_by_MSA0.fa corrected_by_" + msaType + "_c0" + suffix + ".fa"
 	try:
 		subprocess.check_output(['bash','-c', cmdmv])
-		cmdRm = "rm corrected_by_MSA0.fa"
-		subprocess.check_output(['bash','-c', cmdRm])
 	except subprocess.CalledProcessError:
 		pass
-	cmdmv = "mv corrected_by_MSA1.fa corrected_by_MSA_c1" + suffix + ".fa"
+	cmdmv = "cp  /home/marchet/detection-consensus-isoform/results/corrected_by_MSA1.fa corrected_by_" + msaType + "_c1" + suffix + ".fa"
 	try:
 		subprocess.check_output(['bash','-c', cmdmv])
-		cmdRm = "rm corrected_by_MSA1.fa"
-		subprocess.check_output(['bash','-c', cmdRm])
 	except subprocess.CalledProcessError:
 		pass
 
@@ -180,7 +179,7 @@ def hgcolor(suffix):
 	p = subprocessLauncher(cmdHgc)
 
 
-def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread", "MSA"], skipped=["10","50","100"], abund=[ "90", "75 ","50"], nbSR = 100, nbLR = 10):
+def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread", "msa_exon","msa_isoform","msa_sparc"], skipped=["10","50","100"], abund=[ "90", "75 ","50"], nbSR = 100, nbLR = 10):
 	for sizeSkipped in skipped:
 	#~ for sizeSkipped in ["10", "50", "100"]:
 		for relAbund in abund:
@@ -226,8 +225,12 @@ def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "
 			if "Proovread" in listCorrectors:
 				proovread(suffix, currentDirectory)
 			################## MSA ##########################
-			if "MSA" in listCorrectors:
-				msa(suffix)
+			if "msa_exon" in listCorrectors:
+				msa(suffix, "msa_exon")
+			if "msa_isoform" in listCorrectors:
+				msa(suffix, "msa_isoform")
+			if "msa_sparc" in listCorrectors:
+				msa(suffix, "msa_sparc")
 
 	cmdrm = "rm *.h5 ; rm candidates*  ; rm trashme*"
 	try:
@@ -237,7 +240,7 @@ def launchCorrectors(currentDirectory, listCorrectors = ["LoRDEC", "colorMap", "
 
 
 # check results by aligning on the reference sequences
-def alignOnRef(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","MSA"],skipped=[10,50,100], abund=[ 90, 75 ,50]):
+def alignOnRef(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","msa_exon","msa_isoform","msa_sparc"],skipped=[10,50,100], abund=[ 90, 75 ,50]):
 	for soft in listCorrectors:
 		for sizeSkipped in skipped:
 		#~ for sizeSkipped in [100, 50 ,10]:
@@ -254,17 +257,17 @@ def alignOnRef(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagC
 
 
 
-def alignOnRefMsa(skipped=[10,50,100], abund=[ 90, 75 ,50]):
+def alignOnRefMsa(skipped, abund, soft):
 	switches = []
-	soft = "MSA"
+	#~ soft = "MSA"
 	
 	for sizeSkipped in skipped:
 	#~ for sizeSkipped in [100, 50 ,10]:
 		for relAbund in abund:
 		#~ for relAbund in [50, 75, 90]:
 			suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
-			fileNameC0 = "corrected_by_MSA_c0" + suffix + ".fa"
-			fileNameC1 = "corrected_by_MSA_c1" + suffix + ".fa"
+			fileNameC0 = "corrected_by_" + soft + "_c0" + suffix + ".fa"
+			fileNameC1 = "corrected_by_" +soft + "_c1" + suffix + ".fa"
 			isoform = None
 			clusterToIsoform = dict()
 			if (os.path.isfile(fileNameC0) and os.access(fileNameC0, os.R_OK)) or (os.path.isfile(fileNameC1) and os.access(fileNameC1, os.R_OK)):
@@ -294,7 +297,7 @@ def alignOnRefMsa(skipped=[10,50,100], abund=[ 90, 75 ,50]):
 						else:
 							prec = isoform
 				if switch:
-					alignOnRef(["MSA"])
+					alignOnRef([soft])
 					switch = False
 					#~ return 0
 					
@@ -317,7 +320,8 @@ def alignOnRefMsa(skipped=[10,50,100], abund=[ 90, 75 ,50]):
 				cmdCat = "cat resultsinclusion" + soft + suffix + ".sam resultsexclusion" + soft + suffix + ".sam > results" + soft + suffix + ".sam"
 				subprocess.check_output(['bash','-c', cmdCat])
 			else:
-				alignOnRef(["MSA"])
+				#~ alignOnRef(["MSA"])
+				alignOnRef([soft])
 				#~ return 0
 				switch = False
 			switches.append(switch)
@@ -346,7 +350,7 @@ def readSam(soft, suffix):
 	pathSam = "results" + soft + suffix + ".sam"
 	
 	if os.path.exists(pathSam) and os.path.getsize(pathSam) > 0:
-		print("%%%%%%%%%%%%%%%%%%%%%%%ù", pathSam)
+		#~ print("%%%%%%%%%%%%%%%%%%%%%%%ù", pathSam)
 		samFile = open(pathSam, 'r')
 		readsSize = []
 		lines = samFile.readlines()
@@ -428,7 +432,8 @@ def getIsoform(blockResults, lenResults, suffix, queries, nbIncl, nbExcl, soft):
 			meanSizes[targetType]["alignedSize"].append(lenResults[querySeq][targetType][1])
 			#~ ratio = round(meanSizes[targetType]["realSize"][-1]/expectedLengths["inclusion"],3) *100
 			#~ out2.write(soft + " inclusion " +  str(relAbund)  + " " + str(ratio) + " " + str(sizeSkipped) +"\n")
-			if soft == "MSA":
+			#~ if soft == "MSA":
+			if "msa" in soft:
 				outI.write(">" +  querySeq + "\n" + queries[querySeq] + "\n")
 			else:
 				outI.write(">" +  querySeq.split('_')[1] + "\n" + queries[querySeq] + "\n")
@@ -446,7 +451,8 @@ def getIsoform(blockResults, lenResults, suffix, queries, nbIncl, nbExcl, soft):
 			meanSizes[targetType]["alignedSize"].append(lenResults[querySeq][targetType][1])
 			#~ ratio = round(meanSizes[targetType]["realSize"][-1]/expectedLengths["exclusion"],3)*100 
 			#~ out2.write(soft + " exclusion " +  str(relAbund)  + " " + str(ratio) + " " + str(sizeSkipped) +"\n")
-			if soft == "MSA":
+			if "msa" in soft:
+			#~ if soft == "MSA":
 				outE.write(">" +  querySeq + "\n" + queries[querySeq] + "\n")
 			else:
 				outE.write(">" +  querySeq.split('_')[1] + "\n" + queries[querySeq] + "\n")
@@ -473,7 +479,7 @@ def getFileReadNumber(fileName):
 
 
 
-def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","MSA"], skipped=[10,50,100], abund=[ 90, 75 ,50]):
+def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord", "Proovread","msa_exon","msa_isoform","msa_sparc"], skipped=[10,50,100], abund=[ 90, 75 ,50]):
 	out = open("corrected_to_inclusion.txt", 'w')
 	
 	out2 = open("corrected_sizes.txt", 'w')
@@ -522,7 +528,8 @@ def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PB
 						out2.write(soft + " exclusion " +  str(relAbund)  + " " + str(ratioLenE) + " " + str(sizeSkipped) +"\n")
 
 					#~ ### launch corrector benchmark"
-					if soft != "MSA":
+					if "msa" not in soft :
+					#~ if soft != "MSA":
 						if countExcl > 0:
 							cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected_reads_exclusion" + suffix + ".fa -u uncorrected_reads_exclusion" + suffix + ".fa -r perfect_reads_exclusion" + suffix + ".fa"
 							print("Exclusion")
@@ -643,14 +650,14 @@ def computeResults(listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PB
 
 
 
-def simulateReads(covSR, covLR):
-	for sizeSkipped in ["10", "50", "100"]:
-		for relAbund in ["90", "75", "50"]:
+def simulateReads(covSR, covLR, skipped, abund):
+	for sizeSkipped in skipped:
+		for relAbund in  abund:
 	#~ for sizeSkipped in [ "100"]:
 		#~ for relAbund in ["50"]:
-			suffix = "_size_" + sizeSkipped + "_abund_" + relAbund
+			suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
 			# simulation
-			simulation(sizeSkipped, relAbund, suffix, covSR, covLR)
+			simulation(str(sizeSkipped), str(relAbund), suffix, covSR, covLR)
 
 def plotResults(skipped, abund):
 	cmdR = "Rscript corrected_to_major.R corrected_to_inclusion.txt"
@@ -701,14 +708,17 @@ def main():
 	#~ listCorrectors = ["MSA","daccord"]
 	#~ listCorrectors = ["MSA","daccord",  "LoRMA", "MECAT", "PBDagCon"]
 	#~ listCorrectors = ["LoRDEC", "colorMap", "LoRMA", "MECAT", "PBDagCon", "daccord"]
-	listCorrectors = ["MSA"]
+	#~ listCorrectors = ["msa_exon", "msa_isoform", "msa_sparc"]
+	#~ listCorrectors = ["msa_exon"]
+	#~ listCorrectors = ["msa_isoform"]
+	listCorrectors = ["msa_exon", "msa_isoform"]
 	#~ listCorrectors = ["Proovread"]
 	covSR = 1
-	covLR = 10
-	skipped = [100]
-	abund = [100]
-	#~ skipped = [100,50]
-	#~ abund = [75,50,90]
+	covLR = 20
+	#~ skipped = [100]
+	#~ abund = [50]
+	skipped = [100,50]
+	abund = [75,50,90]
 	skippedS = [str(r) for r in skipped]
 	abundS = [str(r) for r in abund]
 	readsFileName = None
@@ -722,14 +732,20 @@ def main():
 				covSR = int(sys.argv[4])
 				covLR = int(sys.argv[5])
 	if readsFileName is None:
-		simulateReads(covSR, covLR)
+		simulateReads(covSR, covLR, skipped, abund)
 	launchCorrectors(currentDirectory,listCorrectors, skippedS, abundS, covSR, covLR)
-	
-	if "MSA" in listCorrectors:
-		listCorrectorsCpy = copy.copy(listCorrectors)
-		listCorrectorsCpy.remove("MSA")
-		alignOnRef(listCorrectorsCpy, skipped, abund)
-		alignOnRefMsa(skipped, abund)
+
+	listCorrectorsCpy = copy.copy(listCorrectors)
+	msaIn = []
+	for msa in ["msa_exon", "msa_isoform", "msa_sparc"]:
+		
+		if  msa in listCorrectors:
+			listCorrectorsCpy.remove(msa)
+			msaIn.append(msa)
+	if len(msaIn) !=0:
+		for soft in msaIn:
+			alignOnRef(listCorrectorsCpy, skipped, abund)
+			alignOnRefMsa(skipped, abund, soft)
 	else:
 		alignOnRef(listCorrectors, skipped, abund)
 	computeResults(listCorrectors, skipped, abund)
