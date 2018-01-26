@@ -32,17 +32,21 @@ def subprocessLauncher(cmd, argstdout=None, argstderr=None,	 argstdin=None):
 def getFiles(pathToFiles, name): #for instance name can be "*.txt"
 	os.chdir(pathToFiles)
 	listFiles = []
+	print("22222222222", glob.glob(name))
 	for files in glob.glob(name):
 		listFiles.append(files)
 	return listFiles
 
 # read simulation
-def simulateReads(covSR, covLR, skipped, abund):
+def simulateReads(covSR, covLR, skipped, abund, EStype):
 	for sizeSkipped in skipped:
 		for relAbund in  abund:
 			suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
 			# simulation
-			cmdSimul = "./ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR)
+			if EStype == "ES":
+				cmdSimul = "./ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR)
+			elif EStype == "MES":
+				cmdSimul = "./MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
 			cmdSimul = subprocessLauncher(cmdSimul)
 
 # return number of reads in a fasta
@@ -61,6 +65,7 @@ def getPerfectSequence(fileName):
 # associate to isoform type the headers of the reference file
 def makeReferenceHeadersList(currentDirectory, skipped, abund):
 	listFilesPerfect = getFiles(currentDirectory, "perfect*_size_" + skipped + "_abund_" + abund + ".fa")
+	print(listFilesPerfect)
 	refIsoformTypesToCounts = dict()
 	refIsoformTypesToSeq = dict()
 	for fileP in listFilesPerfect:
@@ -68,6 +73,7 @@ def makeReferenceHeadersList(currentDirectory, skipped, abund):
 		readNb = getFileReadNumber(currentDirectory + "/" + fileP) #get nb of reads
 		#~ noIsoform = range(readNb)
 		headers = [typeIsoform + str(x) for x in range(readNb)]
+		print(headers)
 		refIsoformTypesToCounts[typeIsoform] = headers
 		perfectSeq = getPerfectSequence(currentDirectory + "/" + fileP)
 		refIsoformTypesToSeq[typeIsoform] = perfectSeq.rstrip()
@@ -119,11 +125,13 @@ def makeCorrectedHeadersList(resultDirectory, currentDirectory, skipped, abund, 
 	listFilesCorrected = getFiles(resultDirectory, "corrected_by_MSA*.fa")
 	correcIsoformTypesToCounts = dict()
 	correcIsoformTypesToSeq = dict()
+	print("%%", listFilesCorrected)
 	for fileC in listFilesCorrected:
 		correctedSequence = getCorrectedSequence(fileC)
 		listHeaders = getCorrectedHeaders(fileC)
 		listHeaders = [x.split("_")[0][1:] + x.split("_")[1].split(' ')[0] for x in listHeaders] #For instance ['exclusion0', 'exclusion1', 'exclusion2', 'exclusion3', 'exclusion4']
-		listIsoforms = [x.split("_")[0][:-1] for x in listHeaders] 
+		listIsoforms = [x.split("_")[0][:-1] for x in listHeaders]
+		print("%", listIsoforms)
 		for isoformType in set(listIsoforms): #unique types of isoforms
 			correcIsoformTypesToCounts[isoformType] = listHeaders
 			correcIsoformTypesToSeq[isoformType] = correctedSequence
@@ -168,11 +176,13 @@ def main():
 	covLR = 20
 	#~ skipped = [50,100]
 	#~ abund = [50,75,90]
-	abund = [10]
-	skipped = [100]
+	abund = [50]
+	skipped = [200]
 	#~ abund = [50]
 	skippedS = [str(r) for r in skipped]
 	abundS = [str(r) for r in abund]
+	#~ EStype = "ES"
+	EStype = "MES"
 
 	# Manage command line arguments
 	parser = argparse.ArgumentParser(description="Benchmark for quality assessment of long reads correctors.")
@@ -186,9 +196,9 @@ def main():
 	outputDirPath = args.outputDirPath
 	covLR = args.covLR
 
-	correctors = ["msa_isoform", "msa_exon"]
+	#~ correctors = ["msa_isoform", "msa_exon"]
 	#~ correctors = ["msa_isoform"]
-	#~ correctors = ["msa_exon"]
+	correctors = ["msa_exon"]
 	if not outputDirPath is None:
 		if not os.path.exists(outputDirPath):
 			os.mkdir(outputDirPath)
@@ -199,7 +209,7 @@ def main():
 				subprocess.check_output(['bash','-c', cmdRm])
 			except subprocess.CalledProcessError:
 				pass
-	simulateReads(covSR, covLR, skipped, abund)
+	simulateReads(covSR, covLR, skipped, abund, EStype)
 	for correc in correctors:
 		for skippedExon in skippedS:
 			for abundanceMajor in abundS:
