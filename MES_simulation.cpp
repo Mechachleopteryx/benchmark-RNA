@@ -196,9 +196,11 @@ void generateReads(uint inclusionAbundance, vector<string>& transcripts, string&
 	ofstream outUncoExcl("uncorrected_reads_exclusion" + outSuffix + ".fa");
 	string refSequence;
 	uint numberLRInclusion12(inclusionAbundance * lrCoverage / 100 );
-	uint numberLRInclusion1((100-inclusionAbundance) * lrCoverage / (3*100) );
-	uint numberLRInclusion2((100-inclusionAbundance) * lrCoverage / (3*100) );
-	uint numberLRExclusion((100-inclusionAbundance) * lrCoverage / (3*100) );
+	uint numberLRInclusion1((100-inclusionAbundance) * (double)lrCoverage / (3.0*100) );
+	uint numberLRInclusion2((100-inclusionAbundance) * (double)lrCoverage / (3.0*100) );
+	uint numberLRExclusion((100-inclusionAbundance) * (double)lrCoverage / (3.0*100) );
+	//~ cout << (double)lrCoverage / (3.0*100) << endl;
+	//~ cout << "number of reads " <<  numberLRInclusion12 << " " << numberLRInclusion1 << " " << numberLRInclusion2 << " " << numberLRExclusion << endl;
 	//~ uint numberSRInclusion(5);
 	//~ uint numberSRExclusion(6);
 	//~ uint numberLRInclusion(900);
@@ -263,7 +265,7 @@ int main(int argc, char ** argv){
 		uint  lrCoverage(10);
 		if (argc > 3){
 			outSuffix = argv[3];
-			if (argc > 5){
+			if (argc > 4){
 				lrCoverage = stoi(argv[4]);
 			}
 		}

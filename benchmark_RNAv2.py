@@ -32,21 +32,22 @@ def subprocessLauncher(cmd, argstdout=None, argstderr=None,	 argstdin=None):
 def getFiles(pathToFiles, name): #for instance name can be "*.txt"
 	os.chdir(pathToFiles)
 	listFiles = []
-	print("22222222222", glob.glob(name))
+	#~ print("22222222222", glob.glob(name))
 	for files in glob.glob(name):
 		listFiles.append(files)
 	return listFiles
 
 # read simulation
-def simulateReads(covSR, covLR, skipped, abund, EStype):
+def simulateReads(covSR, covLR, skipped, abund, EStype, currentDirectory):
 	for sizeSkipped in skipped:
-		for relAbund in  abund:
+		for relAbund in abund:
 			suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
 			# simulation
 			if EStype == "ES":
-				cmdSimul = "./ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR)
+				cmdSimul = currentDirectory + "/ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR)
 			elif EStype == "MES":
-				cmdSimul = "./MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
+				cmdSimul =  currentDirectory + "/MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
+			print("*******************", cmdSimul)
 			cmdSimul = subprocessLauncher(cmdSimul)
 
 # return number of reads in a fasta
@@ -81,7 +82,7 @@ def makeReferenceHeadersList(currentDirectory, skipped, abund):
 
 # align triplets of reads
 def msa(suffix, msaType):
-	print("****************************", msaType)
+	#~ print("****************************", msaType)
 	if msaType == "msa_isoform":
 		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py -r simulatedLR" + suffix + ".fa"
 	elif msaType == "msa_exon":
@@ -125,13 +126,13 @@ def makeCorrectedHeadersList(resultDirectory, currentDirectory, skipped, abund, 
 	listFilesCorrected = getFiles(resultDirectory, "corrected_by_MSA*.fa")
 	correcIsoformTypesToCounts = dict()
 	correcIsoformTypesToSeq = dict()
-	print("%%", listFilesCorrected)
+	#~ print("%%", listFilesCorrected)
 	for fileC in listFilesCorrected:
 		correctedSequence = getCorrectedSequence(fileC)
 		listHeaders = getCorrectedHeaders(fileC)
 		listHeaders = [x.split("_")[0][1:] + x.split("_")[1].split(' ')[0] for x in listHeaders] #For instance ['exclusion0', 'exclusion1', 'exclusion2', 'exclusion3', 'exclusion4']
 		listIsoforms = [x.split("_")[0][:-1] for x in listHeaders]
-		print("%", listIsoforms)
+		#~ print("%", listIsoforms)
 		for isoformType in set(listIsoforms): #unique types of isoforms
 			correcIsoformTypesToCounts[isoformType] = listHeaders
 			correcIsoformTypesToSeq[isoformType] = correctedSequence
@@ -173,16 +174,15 @@ def main():
 	currentDirectory = os.path.dirname(os.path.abspath(sys.argv[0]))
 	installDirectory = os.path.dirname(os.path.realpath(__file__))
 	covSR = 1
-	covLR = 20
-	#~ skipped = [50,100]
-	#~ abund = [50,75,90]
-	abund = [50]
-	skipped = [200]
+	skipped = [50,100]
+	abund = [50,75,90,10]
+	#~ abund = [50]
+	#~ skipped = [200]
 	#~ abund = [50]
 	skippedS = [str(r) for r in skipped]
 	abundS = [str(r) for r in abund]
-	#~ EStype = "ES"
-	EStype = "MES"
+	EStype = "ES"
+	#~ EStype = "MES"
 
 	# Manage command line arguments
 	parser = argparse.ArgumentParser(description="Benchmark for quality assessment of long reads correctors.")
@@ -190,7 +190,7 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-output', nargs='?', type=str, action="store", dest="outputDirPath", help="Name for output directory", default=None)
 	#~ parser.add_argument('-corrector', type=str, action="store", dest="correctors", help="A particular corrector to be used", default=None)
-	parser.add_argument('-coverageLR', nargs='?', type=int, action="store", dest="covLR", help="Coverage for LR simulation (default 10)", default=10)
+	parser.add_argument('-coverage', nargs='?', type=int, action="store", dest="covLR", help="Coverage for LR simulation (default 10)", default=20)
 	# get options for this run
 	args = parser.parse_args()
 	outputDirPath = args.outputDirPath
@@ -209,10 +209,13 @@ def main():
 				subprocess.check_output(['bash','-c', cmdRm])
 			except subprocess.CalledProcessError:
 				pass
-	simulateReads(covSR, covLR, skipped, abund, EStype)
+				
+	simulateReads(covSR, covLR, skipped, abund, EStype, currentDirectory)
 	for correc in correctors:
 		for skippedExon in skippedS:
 			for abundanceMajor in abundS:
+				print(skippedExon, abundanceMajor)
+				
 				listFilesPerfect, refIsoformTypesToCounts, refIsoformTypesToSeq = makeReferenceHeadersList(currentDirectory, str(skippedExon), str(abundanceMajor))
 				suffix = "_size_" + str(skippedExon) + "_abund_" + str(abundanceMajor)
 			
