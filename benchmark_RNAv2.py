@@ -60,6 +60,12 @@ def getPerfectSequence(fileName):
 	seq = subprocess.check_output(['bash','-c', cmdGrep])
 	return seq.decode('ascii')
 
+	
+def getPerfectSequenceLength(fileName):
+	cmdWc = """grep "[ACGT]" -m 1 """ + fileName + "| wc"
+	seq = subprocess.check_output(['bash','-c', cmdWc])
+	return int(seq.decode('ascii').split(" ")[-1].rstrip())
+
 
 # associate to isoform type the headers of the reference file
 def makeReferenceHeadersList(currentDirectory, skipped, abund):
@@ -148,27 +154,8 @@ def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, cu
 				if ratio != 1:
 					isCorrect = False
 				outConf.write(ref + " " + ref2 + " " + str(ratio) + "\n")
-			#~ else:
-				#~ print("this", ref2)
-				#~ outConf.write(ref + " " + ref2 + " 0\n")
-				#~ isCorrect = False
 	outConf.close()
 	return confusionName, isCorrect
-
-
-
-	
-
-
-# check results by aligning on the reference sequences
-#~ def alignOnRef(listCorrectors, skipped, abund, outDir="/home/marchet/detection-consensus-isoform/results"):
-	#~ for soft in listCorrectors:
-		#~ for sizeSkipped in skipped:
-			#~ for relAbund in abund:
-				#~ suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
-				#~ samFile = open("results" + soft + suffix + ".sam", 'w')
-				#~ cmdAlign = "/home/marchet/bin/Complete-Striped-Smith-Waterman-Library/src/ssw_test refSequences" + suffix + ".fa " + outDir + "/corrected_by_" + soft + suffix + ".fa  -c -s"
-				#~ p = subprocessLauncher(cmdAlign, samFile)
 
 
 
@@ -192,16 +179,18 @@ def alignOnRefMsa(soft, skipped, abund, currentDirectory, resultDirectory):
 
 
 
-def getExpectedLength(currentDirectory, suffix):
-	expectedLengths = {"exclusion":0, "inclusion":0}
-	refFile = open(currentDirectory + "/refSequences" + suffix + ".fa", 'r')
-	lines = refFile.readlines()
-	for l in lines:
-		if ">" in l:
-			targetType = l[1:-1]
-		else:
-			expectedLengths[targetType] = len(l) - 1
-	return expectedLengths
+#~ def getExpectedLength(currentDirectory, suffix, isoformType):
+	#~ length = getPerfectSequenceLength(currentDirectory + "/perfect_reads_" + isoformType + suffix + ".fa")
+	#~ print("222222222222222222222222222222222222222222222222222", length)
+	#~ expectedLengths = {}
+	#~ refFile = open(currentDirectory + "/refSequences" + suffix + ".fa", 'r')
+	#~ lines = refFile.readlines()
+	#~ for l in lines:
+		#~ if ">" in l:
+			#~ targetType = l[1:-1]
+		#~ else:
+			#~ expectedLengths[targetType] = len(l) - 1
+	#~ return expectedLengths
 
 
 def readSam(soft, suffix, isoformType, currentDirectory):
@@ -256,18 +245,26 @@ def readSam(soft, suffix, isoformType, currentDirectory):
 def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, soft, refIsoformTypesToSeq):
 	print("********************************************************")
 	suffix = "_size_" + str(skipped) + "_abund_" + str(abund)
-	expectedLengths = getExpectedLength(currentDirectory, suffix)
-	meanSizes = {}
+	outSize = open(currentDirectory + "/sizes_reads.txt", 'w')
+	outSize.write("soft size skipped abund\n")
+	#~ expectedLengths = getExpectedLength(currentDirectory, suffix, isofType)
+	#~ ratioLen = []
 	print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%", soft)
 	for isofType in refIsoformTypesToSeq:
-		print(isofType)
+		expectedLengths = getPerfectSequenceLength(currentDirectory + "/perfect_reads_" + isofType + suffix + ".fa")
+							
+
 		start, readsSize, resultAln, gapsLength, blockResults, alnLength, lenResults, queries = readSam(soft, suffix, isofType, currentDirectory)
-		meanSizes[isofType] = {"realSize" : [], "alignedSize" : []}
-		for querySeq, aln in blockResults.items():
-		# meanSizes = {"exclusion":{"realSize":[], "alignedSize":[]}, "inclusion":{"realSize":[], "alignedSize":[]}}
-			#~ meanSizes[isofType] = {}
-			meanSizes[isofType]["realSize"].append(lenResults[querySeq][isofType][0])
-			meanSizes[isofType ]["alignedSize"].append(lenResults[querySeq][isofType][1])
+		#~ meanSizes[isofType] = {"realSize" : [], "alignedSize" : []}
+		#~ for querySeq, aln in blockResults.items():
+			#~ meanSizes[isofType]["realSize"].append(lenResults[querySeq][isofType][0])
+			#~ meanSizes[isofType ]["alignedSize"].append(lenResults[querySeq][isofType][1])
+		meanReadsSize = round(sum(readsSize)*1.0/len(readsSize),2) if len(readsSize) > 0 else 0
+		ratioLen = round(meanReadsSize*100/expectedLengths,2)
+		outSize.write(soft + " " + str(ratioLen) + " " +  str(skipped) + " "+ str(abund) +"\n")
+
+		#~ ratioLenE = round(meanExclusionCorrectedSize*100/expectedLengths["exclusion"],2)
+		
 		print(currentDirectory + "/corrected_reads_by_" + soft + "_" + isofType + suffix + ".fa #####################################################################################")
 		cmdHead = "head -2 " + currentDirectory + "/corrected_reads_by_" + soft + "_" + isofType + suffix + ".fa > " + currentDirectory + "/corrected.fa"
 		subprocess.check_output(['bash','-c', cmdHead])
@@ -277,8 +274,6 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 		subprocess.check_output(['bash','-c', cmdHead])
 		cmdBench = "python3 " + currentDirectory + "/benchmark-long-read-correction/benchmark.py -c " + currentDirectory + "/corrected.fa -u " + currentDirectory + "/uncorrected.fa -r " + currentDirectory + "/perfect.fa -o " + currentDirectory
 		subprocessLauncher(cmdBench)
-		#~ cmdMv = "mv " + currentDirectory + "/outPositions.txt " + currentDirectory + "/outPositionsExclusion_" + soft +  suffix + ".fa"
-		#~ subprocess.check_output(['bash','-c', cmdMv])
 
 		cmdSed = "sed -i 's/unknown/" + soft + "/g' " + currentDirectory + "/precision.txt"
 		subprocess.check_output(['bash','-c', cmdSed])
@@ -295,83 +290,6 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 		cmdCat = "grep " + soft + " " + currentDirectory + "/correct_base_rate.txt >> " + currentDirectory + "/correct_base_rate_tmp.txt"
 		subprocess.check_output(['bash','-c', cmdCat])
 
-	
-
-	#~ if start is not None:
-	#~ nbIncl = getFileReadNumber("perfect_reads_inclusion" + suffix + ".fa")
-	#~ nbExcl = getFileReadNumber("perfect_reads_exclusion" + suffix + ".fa")
-	#~ meanSizes, countIncl, countExcl, countAssigned, countInverted = getIsoform(blockResults, lenResults, suffix, queries, nbIncl, nbExcl, soft)
-	#~ readNumber = len(blockResults.keys())
-	meanReadsSize = round(sum(readsSize)*1.0/len(readsSize),2) if len(readsSize) > 0 else 0
-	meanInclusionCorrectedSize = round(sum(meanSizes["inclusion"]["alignedSize"])*1.0/len(meanSizes["inclusion"]["alignedSize"]),2) if len(meanSizes["inclusion"]["alignedSize"]) > 0 else 0
-	meanExclusionCorrectedSize = round(sum(meanSizes["exclusion"]["alignedSize"])*1.0/len(meanSizes["exclusion"]["alignedSize"]),2) if len(meanSizes["exclusion"]["alignedSize"]) > 0 else 0
-
-	ratioLenI = round(meanInclusionCorrectedSize*100/expectedLengths["inclusion"],2)
-	ratioLenE = round(meanExclusionCorrectedSize*100/expectedLengths["exclusion"],2)
-
-	print("#############################")
-	#~ print(soft, "correction for inclusion size", sizeSkipped, ", ratio:", relAbund, "/", 100-relAbund)
-	#~ print("Corrected inclusion reads in output:", round(countIncl*100.0/(countIncl+countExcl),2) if countIncl+countExcl != 0 else 0, "%")
-	#~ print("Corrected exclusion reads in output:", round(countExcl*100.0/(countExcl+countIncl),2) if countIncl+countExcl != 0 else 0, "%")
-	#~ print("Mean length corrected reads:", meanReadsSize, ", mean length of inclusion reads:", meanInclusionCorrectedSize, "(", ratioLenI, "% of real size ), mean length of exclusion reads:", meanExclusionCorrectedSize, "(", ratioLenE, "% of real size )")
-	#~ outSize.write(soft + " " + str(ratioLenI) + " " +  str(sizeSkipped) + " "+ str(relAbund) + "\n")
-	#~ outSize.write(soft + " " + str(ratioLenE) + " " +  str(sizeSkipped) + " "+ str(relAbund) +"\n")
-	#~ correctedToIncl = round(countIncl*100.0/(countIncl+countExcl),2) if countIncl+countExcl != 0 else 0
-	#~ if not correctedToIncl == 0 :
-		#~ out.write(soft + " " + str(sizeSkipped) + " " + str(relAbund) + " " + str(correctedToIncl) +"\n")
-		#~ out2.write(soft + " inclusion " +  str(relAbund)  + " " + str(ratioLenI) + " " + str(sizeSkipped) +"\n")
-		#~ out2.write(soft + " exclusion " +  str(relAbund)  + " " + str(ratioLenE) + " " + str(sizeSkipped) +"\n")
-
-	### launch corrector benchmark"
-	#~ if "msa" not in soft :
-		#~ if countExcl > 0:
-			#~ cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected_reads_exclusion" + suffix + ".fa -u uncorrected_reads_exclusion" + suffix + ".fa -r perfect_reads_exclusion" + suffix + ".fa"
-			#~ print("Exclusion")
-			#~ subprocessLauncher(cmdBench)
-			#~ cmdMv = "mv outPositions.txt outPositionsExclusion_" + soft + suffix + ".fa"
-			#~ subprocess.check_output(['bash','-c', cmdMv])
-
-			#~ cmdSed = "sed -i 's/unknown/" + soft + "/g' precision.txt"
-			#~ subprocess.check_output(['bash','-c', cmdSed])
-			#~ cmdCat = "grep " + soft + " precision.txt >> precision_tmp.txt"
-			#~ subprocess.check_output(['bash','-c', cmdCat])
-			
-			#~ cmdSed = "sed -i 's/unknown/" + soft + "/g' recall.txt"
-			#~ subprocess.check_output(['bash','-c', cmdSed])
-			#~ cmdCat = "grep " + soft + " recall.txt >> recall_tmp.txt"
-			#~ subprocess.check_output(['bash','-c', cmdCat])
-			
-			#~ cmdSed = "sed -i 's/unknown/" + soft + "/g' correct_base_rate.txt"
-			#~ subprocess.check_output(['bash','-c', cmdSed])
-			#~ cmdCat = "grep " + soft + " correct_base_rate.txt >> correct_base_rate_tmp.txt"
-			#~ subprocess.check_output(['bash','-c', cmdCat])
-			
-		#~ if countIncl > 0:
-			#~ cmdBench = "python3 ./benchmark-long-read-correction/benchmark.py -c corrected_reads_inclusion" + suffix + ".fa -u uncorrected_reads_inclusion" + suffix + ".fa -r perfect_reads_inclusion" + suffix + ".fa"
-			#~ print("Inclusion")
-			#~ subprocessLauncher(cmdBench)
-			#~ cmdMv = "mv outPositions.txt outPositionsInclusion_" + soft + suffix + ".fa"
-			#~ subprocess.check_output(['bash','-c', cmdMv])
-
-			#~ cmdSed = "sed -i 's/unknown/" + soft + "/g' precision.txt"
-			#~ subprocess.check_output(['bash','-c', cmdSed])
-			#~ cmdCat = "grep " + soft + " precision.txt >> precision_tmp.txt"
-			#~ subprocess.check_output(['bash','-c', cmdCat])
-			
-			#~ cmdSed = "sed -i 's/unknown/" + soft + "/g' recall.txt"
-			#~ subprocess.check_output(['bash','-c', cmdSed])
-			#~ cmdCat = "grep " + soft + " recall.txt >> recall_tmp.txt"
-			#~ subprocess.check_output(['bash','-c', cmdCat])
-
-			#~ cmdSed = "sed -i 's/unknown/" + soft + "/g' correct_base_rate.txt"
-			#~ subprocess.check_output(['bash','-c', cmdSed])
-			#~ cmdCat = "grep " + soft + " correct_base_rate.txt >> correct_base_rate_tmp.txt"
-			#~ subprocess.check_output(['bash','-c', cmdCat])
-	#~ else:
-		#~ print("Exclusion")
-		#~ if countExcl > 0:
-	
-
 
 
 
@@ -379,6 +297,16 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix):
 	Rcmd = "Rscript " + currentDirectory + "/matrice_confusion.R " + confusionFile + " " + corrector  + suffix + " " + currentDirectory
 	subprocessLauncher(Rcmd)
+
+def printMetrics(currentDirectory):
+	cmdR = "Rscript " + currentDirectory + "/plot_recall.R " + currentDirectory + "/recall.txt " + currentDirectory
+	subprocessLauncher(cmdR)
+	cmdR = "Rscript " + currentDirectory + "/plot_precision.R " + currentDirectory + "/precision.txt " + currentDirectory
+	subprocessLauncher(cmdR)
+	cmdR = "Rscript " + currentDirectory + "/plot_correct_base_rate.R " + currentDirectory + "/correct_base_rate.txt " + currentDirectory
+	subprocessLauncher(cmdR)
+	cmdR = "Rscript " + currentDirectory + "/plot_size.R " + currentDirectory + "/sizes_reads.txt " + currentDirectory
+	subprocessLauncher(cmdR)
 
 
 def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, outDir="/home/marchet/detection-consensus-isoform/results"):
@@ -446,6 +374,7 @@ def main():
 
 	cmdMv = "mv " + currentDirectory + "/correct_base_rate_tmp.txt " + currentDirectory + "/correct_base_rate.txt"
 	subprocess.check_output(['bash','-c', cmdMv])
+	printMetrics(currentDirectory)
 
 if __name__ == '__main__':
 	main()

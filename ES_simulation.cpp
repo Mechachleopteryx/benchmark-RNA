@@ -208,16 +208,16 @@ void generateReads(uint inclusionAbundance, vector<string>& transcripts, string&
 		outUncoExcl << ">" << i << endl << read << endl;
 	}
 
-	// SHORT READS
-	uint start;
-	for (uint i(0); i < numberSRInclusion; ++i){
-		start = rand() % (transcripts[0].size() - srLength);
-		outSR << ">inclusion_" << i << endl << transcripts[0].substr(start, srLength) << endl;
-	}
-	for (uint i(0); i < numberSRExclusion; ++i){
-		start = rand() % (transcripts[1].size() - srLength);
-		outSR << ">exclusion_" << i << endl << transcripts[1].substr(start, srLength) << endl;
-	}
+	//~ // SHORT READS
+	//~ uint start;
+	//~ for (uint i(0); i < numberSRInclusion; ++i){
+		//~ start = rand() % (transcripts[0].size() - srLength);
+		//~ outSR << ">inclusion_" << i << endl << transcripts[0].substr(start, srLength) << endl;
+	//~ }
+	//~ for (uint i(0); i < numberSRExclusion; ++i){
+		//~ start = rand() % (transcripts[1].size() - srLength);
+		//~ outSR << ">exclusion_" << i << endl << transcripts[1].substr(start, srLength) << endl;
+	//~ }
 
 	// REF FILE
 	outRef << ">inclusion" << endl << transcripts[0] << endl;
