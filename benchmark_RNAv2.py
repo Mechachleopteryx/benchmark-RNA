@@ -242,11 +242,10 @@ def readSam(soft, suffix, isoformType, currentDirectory):
 
 
 
-def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, soft, refIsoformTypesToSeq):
+def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, soft, refIsoformTypesToSeq, outSize):
 	print("********************************************************")
 	suffix = "_size_" + str(skipped) + "_abund_" + str(abund)
-	outSize = open(currentDirectory + "/sizes_reads.txt", 'w')
-	outSize.write("soft size skipped abund\n")
+	
 	#~ expectedLengths = getExpectedLength(currentDirectory, suffix, isofType)
 	#~ ratioLen = []
 	print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%", soft)
@@ -293,6 +292,53 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 
 
 
+#\textbf{\huge %(school)s \\}
+
+def writeLatex(options, currentDirectory):
+	content = r'''\documentclass{article}
+	\usepackage{graphicx}
+
+	\begin{document}
+	
+	\section{Recall, precision, correct bases rate}
+	\begin{figure}[ht!]
+	\centering\includegraphics[width=0.8\textwidth]{%(recall)s}
+	\caption{\textbf{Recall of correctors on %(coverage)sX reads} Recall values in ordinate are computed after correction for each read experiment, using correctors in absciss.}
+	\label{fig:recall}
+	\end{figure}
+	
+	\begin{figure}[ht!]
+	\centering\includegraphics[width=0.8\textwidth]{%(precision)s}
+	\caption{\textbf{Precision of correctors on %(coverage)sX reads} Precision values in ordinate are computed after correction for each read experiment, using correctors in absciss.}
+	\label{fig:precision}
+	\end{figure}
+
+	
+	\begin{figure}[ht!]
+	\centering\includegraphics[width=0.8\textwidth]{%(correctRate)s}
+	\caption{\textbf{Correct base rate after correction on %(coverage)sX reads} Correct base rate in ordinate, computed after correction for each read experiment, using correctors in absciss.}
+	\label{fig:correctRate}
+	\end{figure}
+
+	\section{Reads size}
+
+	\begin{figure}[ht!]
+	\centering\includegraphics[width=0.8\textwidth]{%(size)s}
+	\caption{\textbf{Ratio of corrected over real isoform length in corrected reads} Coverage of %(coverage)sX, ratio in ordinate, corrector in absciss.}
+	\label{fig:size}
+	\end{figure}
+
+
+	\section{Isoform detection}
+	\end{document}
+	'''
+	with open(currentDirectory + '/cover.tex','w') as f:
+		f.write(content%options)
+	proc = subprocess.Popen(['pdflatex', '-output-directory', currentDirectory, currentDirectory + '/cover.tex'])
+	proc.communicate()
+
+
+
 #R functions
 def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix):
 	Rcmd = "Rscript " + currentDirectory + "/matrice_confusion.R " + confusionFile + " " + corrector  + suffix + " " + currentDirectory
@@ -320,6 +366,11 @@ def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor
 def main():
 	currentDirectory = os.path.dirname(os.path.abspath(sys.argv[0]))
 	installDirectory = os.path.dirname(os.path.realpath(__file__))
+
+
+	outSize = open(currentDirectory + "/sizes_reads.txt", 'w')
+	outSize.write("soft size skipped abund\n")
+	
 	covSR = 1
 	#~ skipped = [50,100]
 	#~ abund = [50,75,90,10]
@@ -366,7 +417,7 @@ def main():
 				isCorrect = computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts)
 				if isCorrect: # all reads were corrected to the right isoform
 					alignOnRefMsa(correc, skippedExon, abundanceMajor, currentDirectory, "/home/marchet/detection-consensus-isoform/results")
-					computeResultsRecallPrecision(correc, skippedExon, abundanceMajor, currentDirectory, correc, refIsoformTypesToSeq)
+					computeResultsRecallPrecision(correc, skippedExon, abundanceMajor, currentDirectory, correc, refIsoformTypesToSeq, outSize)
 	cmdMv = "mv " + currentDirectory + "/recall_tmp.txt " + currentDirectory + "/recall.txt"
 	subprocess.check_output(['bash','-c', cmdMv])
 	cmdMv = "mv " + currentDirectory + "/precision_tmp.txt " + currentDirectory + "/precision.txt"
@@ -375,6 +426,7 @@ def main():
 	cmdMv = "mv " + currentDirectory + "/correct_base_rate_tmp.txt " + currentDirectory + "/correct_base_rate.txt"
 	subprocess.check_output(['bash','-c', cmdMv])
 	printMetrics(currentDirectory)
+	writeLatex({"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png"}, currentDirectory)
 
 if __name__ == '__main__':
 	main()
