@@ -147,13 +147,26 @@ def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, cu
 	outConf = open(confusionName, 'w')
 	outConf.write("reference correction ratio\n")
 	isCorrect = True
+	ratios = dict()
 	for ref in counts:
 		for ref2 in counts:
 			if ref2 in counts[ref].keys():
 				ratio = counts[ref][ref2] * 1.0 / len(refIsoformTypesToCounts[ref]) if len(refIsoformTypesToCounts[ref]) != 0 else 0
 				if ratio != 1:
 					isCorrect = False
-				outConf.write(ref + " " + ref2 + " " + str(ratio) + "\n")
+				#~ outConf.write(ref + " " + ref2 + " " + str(ratio) + "\n")
+				if ref in ratios.keys():
+					if ref2 in ratios[ref].keys():
+						ratios[ref][ref2].append(ratio)
+					else:
+						ratios[ref][ref2] = [ratio]
+				else:
+					ratios[ref] = dict()
+					ratios[ref][ref2] = [ratio]
+	for ref in ratios.keys():
+		for ref2 in ratios[ref].keys():
+			meanRatio = sum(ratios[ref][ref2])/len(ratios[ref][ref2]) if len(ratios[ref][ref2]) > 0 else 0
+			outConf.write(ref + " " + ref2 + " " + str(meanRatio) + "\n")
 	outConf.close()
 	return confusionName, isCorrect
 
@@ -178,19 +191,6 @@ def alignOnRefMsa(soft, skipped, abund, currentDirectory, resultDirectory):
 		subprocess.check_output(['bash','-c', cmdCp])
 
 
-
-#~ def getExpectedLength(currentDirectory, suffix, isoformType):
-	#~ length = getPerfectSequenceLength(currentDirectory + "/perfect_reads_" + isoformType + suffix + ".fa")
-	#~ print("222222222222222222222222222222222222222222222222222", length)
-	#~ expectedLengths = {}
-	#~ refFile = open(currentDirectory + "/refSequences" + suffix + ".fa", 'r')
-	#~ lines = refFile.readlines()
-	#~ for l in lines:
-		#~ if ">" in l:
-			#~ targetType = l[1:-1]
-		#~ else:
-			#~ expectedLengths[targetType] = len(l) - 1
-	#~ return expectedLengths
 
 
 def readSam(soft, suffix, isoformType, currentDirectory):
@@ -294,6 +294,20 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 
 #\textbf{\huge %(school)s \\}
 
+def writeTexIsoforms(currentDirectory, dictLatex):
+	listConfusion = getFiles(currentDirectory, "confusion*.png")
+	out = ''
+	coverage = dictLatex["coverage"]
+	for i,matrix in enumerate(listConfusion):
+		out += r'''\begin{figure}[ht!]
+	\centering\includegraphics[width=0.7\textwidth]{''' + matrix + r'''}
+	\caption{\textbf{Confusion matrix of isoforms, for coverage ''' + coverage + r'''X} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1.}
+	\label{fig:confusion''' + str(i) + '''}
+	\end{figure}'''
+	dictLatex["isoform"] = out
+
+
+
 def writeLatex(options, currentDirectory):
 	content = r'''\documentclass{article}
 	\usepackage{graphicx}
@@ -330,6 +344,8 @@ def writeLatex(options, currentDirectory):
 
 
 	\section{Isoform detection}
+	%(isoform)s
+	
 	\end{document}
 	'''
 	with open(currentDirectory + '/cover.tex','w') as f:
@@ -341,7 +357,7 @@ def writeLatex(options, currentDirectory):
 
 #R functions
 def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix):
-	Rcmd = "Rscript " + currentDirectory + "/matrice_confusion.R " + confusionFile + " " + corrector  + suffix + " " + currentDirectory
+	Rcmd = "Rscript " + currentDirectory + "/matrice_confusion.R " + confusionFile + " " + corrector  + " " + currentDirectory
 	subprocessLauncher(Rcmd)
 
 def printMetrics(currentDirectory):
@@ -426,7 +442,9 @@ def main():
 	cmdMv = "mv " + currentDirectory + "/correct_base_rate_tmp.txt " + currentDirectory + "/correct_base_rate.txt"
 	subprocess.check_output(['bash','-c', cmdMv])
 	printMetrics(currentDirectory)
-	writeLatex({"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png"}, currentDirectory)
+	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png"}
+	writeTexIsoforms(currentDirectory, dictLatex)
+	writeLatex(dictLatex, currentDirectory)
 
 if __name__ == '__main__':
 	main()
