@@ -57,8 +57,8 @@ def simulateReads(skipped, abund, coverage, EStype, currentDirectory, errorRate)
 						cmdSimul = currentDirectory + "/ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR) + " " + str(error)
 					elif EStype == "MES": #todo make error rate a parameter for this one
 						cmdSimul =  currentDirectory + "/MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
-					elif EStype == "single":
-						cmdSimul =  currentDirectory + "/single_simulation " + str(sizeSkipped) + " " + str(suffix) +  " " + str(covLR)
+					elif EStype == "alt":
+						cmdSimul =  currentDirectory + "/AltSE_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR) + " " + str(error)
 					cmdSimul = subprocessLauncher(cmdSimul)
 					
 					checkReadFiles(currentDirectory + "/simulatedLR"+ suffix +".fa"  )
@@ -443,18 +443,20 @@ def main():
 	print(currentDirectory)
 	
 	covSR = 1
-	#~ skipped = [50,100]
+	skipped = [40,50,100]
 	#~ abund = [50,75,90,10]
 	#~ abund = [50,75,90]
-	errorRate = [13,5]
+	#~ errorRate = [13,5]
+	errorRate = [13]
 	errorRateToKeep = 13
 
 	abund = [50]
-	skipped = [100]
+	#~ skipped = [100]
 	skippedS = [str(r) for r in skipped]
 	abundS = [str(r) for r in abund]
 	EStype = "ES"
 	#~ EStype = "MES"
+	#~ EStype = "alt"
 
 	# Manage command line arguments
 	parser = argparse.ArgumentParser(description="Benchmark for quality assessment of long reads correctors.")
