@@ -325,7 +325,7 @@ def writeTexIsoforms(currentDirectory, dictLatex):
 
 
 
-def writeLatex(options, currentDirectory, errorRate):
+def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 	content = r'''\documentclass{article}
 	\usepackage{graphicx}
 
@@ -382,9 +382,10 @@ def writeLatex(options, currentDirectory, errorRate):
 	content += r'''
 	\end{document}
 	'''
-	with open(currentDirectory + '/cover.tex','w') as f:
+	print(outDir + "/" + outputPDFName +'.tex')
+	with open(outDir + "/" + outputPDFName +'.tex','w') as f:
 		f.write(content%options)
-	proc = subprocess.Popen(['pdflatex', '-output-directory', currentDirectory, currentDirectory + '/cover.tex'])
+	proc = subprocess.Popen(['pdflatex', '-output-directory', outDir, outputPDFName + ".tex"])
 	proc.communicate()
 
 
@@ -462,11 +463,13 @@ def main():
 	parser.add_argument('-output', nargs='?', type=str, action="store", dest="outputDirPath", help="Name for output directory", default=None)
 	#~ parser.add_argument('-corrector', type=str, action="store", dest="correctors", help="A particular corrector to be used", default=None)
 	parser.add_argument('-coverage', nargs='?', type=int, action="store", dest="coverage", help="Coverage for LR simulation (default 20)", default=None)
+	parser.add_argument('-pdf', nargs='?', type=str, action="store", dest="pdf", help="Name for pdf outfile", default="expe")
 	# get options for this run
 	args = parser.parse_args()
 	outputDirPath = args.outputDirPath
 	#~ covLR = args.covLR
 
+	
 	correctors = ["msa_isoform", "msa_exon"]
 	#~ correctors = ["msa_isoform"]
 	#~ correctors = ["msa_exon"]
@@ -489,6 +492,10 @@ def main():
 				subprocess.check_output(['bash','-c', cmdRm])
 			except subprocess.CalledProcessError:
 				pass
+	else:
+		outputDirPath = currentDirectory
+	outputPDFName = args.pdf 
+
 	cmdFile = '''echo "value metric coverage error" > ''' + currentDirectory + '''/all_recall_precision.txt'''
 	subprocess.check_output(['bash','-c', cmdFile])
 	
@@ -531,7 +538,7 @@ def main():
 	printMetricErrorRates(currentDirectory, covForFigs)
 	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png", "coverage_function": currentDirectory + "/metrics_function_coverage.png", "errorrate_function" : currentDirectory + "/metrics_function_errorrate.png", "coverageToKeep": covForFigs}
 	writeTexIsoforms(currentDirectory, dictLatex)
-	writeLatex(dictLatex, currentDirectory, errorRate)
+	writeLatex(dictLatex, currentDirectory, errorRate, outputDirPath, outputPDFName)
 
 if __name__ == '__main__':
 	main()
