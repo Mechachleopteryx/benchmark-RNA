@@ -14,6 +14,11 @@ import glob
 def printWarningMsg(msg):
 	print("[Warning] " + msg)
 
+# to return if an error makes the run impossible
+def dieToFatalError (msg):
+  print("[FATAL ERROR] " + msg)
+  sys.exit(1);
+
 
 # check if file exists and is not empty
 def checkIfFile(pathToFile):
@@ -24,7 +29,6 @@ def checkIfFile(pathToFile):
 # launch subprocess
 def subprocessLauncher(cmd, argstdout=None, argstderr=None,	 argstdin=None):
 	args = shlex.split(cmd)
-	#~ p = subprocess.Popen(args, stdin = argstdin, stdout = argstdout, stderr = argstderr)
 	p = subprocess.call(args, stdin = argstdin, stdout = argstdout, stderr = argstderr)
 	return p
 
@@ -37,16 +41,28 @@ def getFiles(pathToFiles, name): #for instance name can be "*.txt"
 	return listFiles
 
 # read simulation
-def simulateReads(covSR, covLR, skipped, abund, EStype, currentDirectory):
-	for sizeSkipped in skipped:
-		for relAbund in abund:
-			suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund)
-			# simulation
-			if EStype == "ES":
-				cmdSimul = currentDirectory + "/ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR)
-			elif EStype == "MES":
-				cmdSimul =  currentDirectory + "/MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
-			cmdSimul = subprocessLauncher(cmdSimul)
+def simulateReads(skipped, abund, coverage, EStype, currentDirectory, errorRate):
+	covSR = 10
+	for error in errorRate:
+		for covLR in coverage:
+			for sizeSkipped in skipped:
+				for relAbund in abund:
+					suffix = "_size_" + str(sizeSkipped) + "_abund_" + str(relAbund) + "_cov_" + str(covLR) + "_err_" + str(error)
+					# simulation
+					if checkIfFile(currentDirectory + "/simulatedLR"+ suffix +".fa" ):
+						cmdRm = "rm " + currentDirectory + "/simulatedLR"+ suffix +".fa"
+						subprocess.check_output(['bash','-c', cmdRm])
+					if EStype == "ES":
+						print("go", sizeSkipped, relAbund, covLR)
+						cmdSimul = currentDirectory + "/ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR) + " " + str(error)
+					elif EStype == "MES": #todo make error rate a parameter for this one
+						cmdSimul =  currentDirectory + "/MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
+					elif EStype == "single":
+						cmdSimul =  currentDirectory + "/single_simulation " + str(sizeSkipped) + " " + str(suffix) +  " " + str(covLR)
+					cmdSimul = subprocessLauncher(cmdSimul)
+					
+					checkReadFiles(currentDirectory + "/simulatedLR"+ suffix +".fa"  )
+	
 
 # return number of reads in a fasta
 def getFileReadNumber(fileName):
@@ -68,8 +84,8 @@ def getPerfectSequenceLength(fileName):
 
 
 # associate to isoform type the headers of the reference file
-def makeReferenceHeadersList(currentDirectory, skipped, abund):
-	listFilesPerfect = getFiles(currentDirectory, "perfect*_size_" + skipped + "_abund_" + abund + ".fa")
+def makeReferenceHeadersList(currentDirectory, skipped, abund, cov, error):
+	listFilesPerfect = getFiles(currentDirectory, "perfect*_size_" + skipped + "_abund_" + abund + "_cov_" + cov  + "_err_" + str(error) + ".fa")
 	print(listFilesPerfect)
 	refIsoformTypesToCounts = dict()
 	refIsoformTypesToSeq = dict()
@@ -143,7 +159,7 @@ def makeCorrectedHeadersList(resultDirectory, currentDirectory, skipped, abund, 
 #compute ratio of isoforms representations in ref and corrected files
 def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix):
 	counts = compareRefAndCorrectedHeaders(refIsoformTypesToCounts, correcIsoformTypesToCounts)
-	confusionName = currentDirectory + "/matrix_confusion" + suffix + ".txt"
+	confusionName = currentDirectory + "/matrix_confusion" + suffix +  ".txt"
 	outConf = open(confusionName, 'w')
 	outConf.write("reference correction ratio\n")
 	isCorrect = True
@@ -173,12 +189,11 @@ def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, cu
 
 
 
-def alignOnRefMsa(soft, skipped, abund, currentDirectory, resultDirectory):
-	suffix = "_size_" + str(skipped) + "_abund_" + str(abund)
+def alignOnRefMsa(soft, skipped, abund, currentDirectory, resultDirectory, cov, error):
+	suffix = "_size_" + str(skipped) + "_abund_" + str(abund) + "_cov_" + str(cov)  + "_err_" + str(error)
 	listFileNames = getFiles(resultDirectory, "corrected_by_MSA*.fa")
 	for fileC in listFileNames:
 		isoform = getCorrectedHeaders(resultDirectory + "/" + fileC)[0].split("_")[0][1:]
-		print(isoform, "**********************isoform")
 		cmdGrep = "grep "+ isoform + " " + currentDirectory + "/refSequences" + suffix + ".fa -A 1 > " + currentDirectory + "/refSequences" + isoform + suffix + ".fa"
 		subprocess.check_output(['bash','-c', cmdGrep])
 		cmdGrep = "grep "+ isoform + " " + fileC + " -A 1 > toalign.fa"
@@ -242,13 +257,16 @@ def readSam(soft, suffix, isoformType, currentDirectory):
 
 
 
-def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, soft, refIsoformTypesToSeq, outSize):
-	print("********************************************************")
-	suffix = "_size_" + str(skipped) + "_abund_" + str(abund)
-	
+def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, soft, refIsoformTypesToSeq, outSize, cov, error):
+	suffix = "_size_" + str(skipped) + "_abund_" + str(abund) + "_cov_" + str(cov)  + "_err_" + str(error)
+	cmdFile = "> precision_tmp.txt"
+	subprocess.check_output(['bash','-c', cmdFile])
+	cmdFile = "> recall_tmp.txt"
+	subprocess.check_output(['bash','-c', cmdFile])
+	cmdFile = "> correct_base_rate_tmp.txt"
+	subprocess.check_output(['bash','-c', cmdFile])
 	#~ expectedLengths = getExpectedLength(currentDirectory, suffix, isofType)
 	#~ ratioLen = []
-	print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%", soft)
 	for isofType in refIsoformTypesToSeq:
 		expectedLengths = getPerfectSequenceLength(currentDirectory + "/perfect_reads_" + isofType + suffix + ".fa")
 							
@@ -264,7 +282,6 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 
 		#~ ratioLenE = round(meanExclusionCorrectedSize*100/expectedLengths["exclusion"],2)
 		
-		print(currentDirectory + "/corrected_reads_by_" + soft + "_" + isofType + suffix + ".fa #####################################################################################")
 		cmdHead = "head -2 " + currentDirectory + "/corrected_reads_by_" + soft + "_" + isofType + suffix + ".fa > " + currentDirectory + "/corrected.fa"
 		subprocess.check_output(['bash','-c', cmdHead])
 		cmdHead = "head -2 " + currentDirectory + "/uncorrected_reads_"  + isofType + suffix + ".fa > " + currentDirectory + "/uncorrected.fa"
@@ -308,7 +325,7 @@ def writeTexIsoforms(currentDirectory, dictLatex):
 
 
 
-def writeLatex(options, currentDirectory):
+def writeLatex(options, currentDirectory, errorRate):
 	content = r'''\documentclass{article}
 	\usepackage{graphicx}
 
@@ -345,7 +362,24 @@ def writeLatex(options, currentDirectory):
 
 	\section{Isoform detection}
 	%(isoform)s
-	
+
+
+	 \section{Metrics in function of coverage}
+	 For the exon-correction solution.
+	 \begin{figure}[ht!]
+	\centering\includegraphics[width=0.8\textwidth]{%(coverage_function)s}
+	\caption{\textbf{Correction quality over coverage for correction by exon solution} Precision, recall and correct base ratio are colored bars. Coverages increase in the absciss.}
+	\label{fig:coverage}
+	\end{figure}'''
+
+	if len(errorRate) > 1:
+		content += r''' \section{Metrics in function of error rate}
+		 \begin{figure}[ht!]
+		\centering\includegraphics[width=0.8\textwidth]{%(errorrate_function)s}
+		\caption{\textbf{Correction quality over error rates for correction by exon solution} Precision, recall and correct base ratio are colored bars. Error rates increase in the absciss. Computed for a coverage of %(coverageToKeep)s.}
+		\label{fig:errorrate}
+		\end{figure}'''
+	content += r'''
 	\end{document}
 	'''
 	with open(currentDirectory + '/cover.tex','w') as f:
@@ -357,39 +391,63 @@ def writeLatex(options, currentDirectory):
 
 #R functions
 def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix):
-	Rcmd = "Rscript " + currentDirectory + "/matrice_confusion.R " + confusionFile + " " + corrector  + " " + currentDirectory
+	Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix.R " + confusionFile + " " + corrector  + " " + currentDirectory
 	subprocessLauncher(Rcmd)
 
-def printMetrics(currentDirectory):
-	cmdR = "Rscript " + currentDirectory + "/plot_recall.R " + currentDirectory + "/recall.txt " + currentDirectory
+def printMetrics(currentDirectory, cov):
+	cmdR = "Rscript " + currentDirectory + "/plot_recall.R " + currentDirectory + "/recall_cov_" + str(cov) +".txt " + currentDirectory
 	subprocessLauncher(cmdR)
-	cmdR = "Rscript " + currentDirectory + "/plot_precision.R " + currentDirectory + "/precision.txt " + currentDirectory
+	cmdR = "Rscript " + currentDirectory + "/plot_precision.R " + currentDirectory + "/precision_cov_" + str(cov) +".txt " + currentDirectory
 	subprocessLauncher(cmdR)
-	cmdR = "Rscript " + currentDirectory + "/plot_correct_base_rate.R " + currentDirectory + "/correct_base_rate.txt " + currentDirectory
+	cmdR = "Rscript " + currentDirectory + "/plot_correct_base_rate.R " + currentDirectory + "/correct_base_rate_cov_" + str(cov) +".txt " + currentDirectory
 	subprocessLauncher(cmdR)
-	cmdR = "Rscript " + currentDirectory + "/plot_size.R " + currentDirectory + "/sizes_reads.txt " + currentDirectory
+	cmdR = "Rscript " + currentDirectory + "/plot_size.R " + currentDirectory + "/sizes_reads_cov_" + str(cov) +".txt " + currentDirectory
+	subprocessLauncher(cmdR)
+	cmdR = "Rscript " + currentDirectory + "/plot_all_metrics_coverage.R " + currentDirectory + "/all_recall_precision.txt " + currentDirectory
 	subprocessLauncher(cmdR)
 
 
-def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, outDir="/home/marchet/detection-consensus-isoform/results"):
+def printMetricErrorRates(currentDirectory, cov):
+	cmdR = "Rscript " + currentDirectory + "/plot_all_metrics_errorrate.R " + currentDirectory + "/all_recall_precision.txt " + str(cov) + " " + currentDirectory
+	subprocessLauncher(cmdR)
+
+def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, cov, covToPrint, outDir="/home/marchet/detection-consensus-isoform/results"):
 	msa(suffix, correc)
 	correcIsoformTypesToCounts, correcIsoformTypesToSeq = makeCorrectedHeadersList(outDir, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts)
 	confusionFile, isCorrect = computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix)
-	printConfusionMatrix(currentDirectory, correc, confusionFile, suffix)
+	if cov == covToPrint:
+		printConfusionMatrix(currentDirectory, correc, confusionFile, suffix)
 	return isCorrect
+
+
+
+
+
+def checkReadFiles(readfiles):
+	if readfiles is None:
+		return True
+	allFilesAreOK = True
+	#~ for file in readfiles:
+	if not os.path.isfile(readfiles):
+		print("[ERROR] File \""+readfiles+"\" does not exist.")
+		allFilesAreOK = False
+	if not allFilesAreOK:
+		dieToFatalError("One or more read files do not exist.")
 
 
 def main():
 	currentDirectory = os.path.dirname(os.path.abspath(sys.argv[0]))
 	installDirectory = os.path.dirname(os.path.realpath(__file__))
 
-
-	outSize = open(currentDirectory + "/sizes_reads.txt", 'w')
-	outSize.write("soft size skipped abund\n")
+	print(currentDirectory)
 	
 	covSR = 1
 	#~ skipped = [50,100]
 	#~ abund = [50,75,90,10]
+	#~ abund = [50,75,90]
+	errorRate = [13,5]
+	errorRateToKeep = 13
+
 	abund = [50]
 	skipped = [100]
 	skippedS = [str(r) for r in skipped]
@@ -403,16 +461,24 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-output', nargs='?', type=str, action="store", dest="outputDirPath", help="Name for output directory", default=None)
 	#~ parser.add_argument('-corrector', type=str, action="store", dest="correctors", help="A particular corrector to be used", default=None)
-	parser.add_argument('-coverage', nargs='?', type=int, action="store", dest="covLR", help="Coverage for LR simulation (default 10)", default=20)
+	parser.add_argument('-coverage', nargs='?', type=int, action="store", dest="coverage", help="Coverage for LR simulation (default 20)", default=None)
 	# get options for this run
 	args = parser.parse_args()
 	outputDirPath = args.outputDirPath
-	covLR = args.covLR
+	#~ covLR = args.covLR
 
 	correctors = ["msa_isoform", "msa_exon"]
 	#~ correctors = ["msa_isoform"]
 	#~ correctors = ["msa_exon"]
 	#~ correctors = ["msa_sparc"]
+	if args.coverage is not None:
+		coverage = [args.coverage]
+	else:
+		coverage = [15]
+		#~ coverage = [5, 10, 15, 20, 30, 50, 100]
+		#~ coverage = [10, 15, 20, 30, 50]
+		#~ coverage = [10, 15, 20]
+	covForFigs = 15
 	if not outputDirPath is None:
 		if not os.path.exists(outputDirPath):
 			os.mkdir(outputDirPath)
@@ -423,28 +489,49 @@ def main():
 				subprocess.check_output(['bash','-c', cmdRm])
 			except subprocess.CalledProcessError:
 				pass
-				
-	simulateReads(covSR, covLR, skipped, abund, EStype, currentDirectory)
-	for correc in correctors:
-		for skippedExon in skippedS:
-			for abundanceMajor in abundS:
-				listFilesPerfect, refIsoformTypesToCounts, refIsoformTypesToSeq = makeReferenceHeadersList(currentDirectory, str(skippedExon), str(abundanceMajor))
-				suffix = "_size_" + str(skippedExon) + "_abund_" + str(abundanceMajor)
-				isCorrect = computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts)
-				if isCorrect: # all reads were corrected to the right isoform
-					alignOnRefMsa(correc, skippedExon, abundanceMajor, currentDirectory, "/home/marchet/detection-consensus-isoform/results")
-					computeResultsRecallPrecision(correc, skippedExon, abundanceMajor, currentDirectory, correc, refIsoformTypesToSeq, outSize)
-	cmdMv = "mv " + currentDirectory + "/recall_tmp.txt " + currentDirectory + "/recall.txt"
-	subprocess.check_output(['bash','-c', cmdMv])
-	cmdMv = "mv " + currentDirectory + "/precision_tmp.txt " + currentDirectory + "/precision.txt"
-	subprocess.check_output(['bash','-c', cmdMv])
+	cmdFile = '''echo "value metric coverage error" > ''' + currentDirectory + '''/all_recall_precision.txt'''
+	subprocess.check_output(['bash','-c', cmdFile])
+	
 
-	cmdMv = "mv " + currentDirectory + "/correct_base_rate_tmp.txt " + currentDirectory + "/correct_base_rate.txt"
-	subprocess.check_output(['bash','-c', cmdMv])
-	printMetrics(currentDirectory)
-	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png"}
+
+	simulateReads(skipped, abund, coverage, EStype, currentDirectory, errorRate)
+	for error in errorRate:
+		for covLR in coverage:
+			#~ input(covLR)
+			print(covLR)
+			outSize = open(currentDirectory + "/sizes_reads_cov_"+ str(covLR)+ "_err_" +str(error)+".txt", 'w')
+			outSize.write("soft size skipped abund\n")
+			for correc in correctors:
+				for skippedExon in skippedS:
+					for abundanceMajor in abundS:
+						listFilesPerfect, refIsoformTypesToCounts, refIsoformTypesToSeq = makeReferenceHeadersList(currentDirectory, str(skippedExon), str(abundanceMajor), str(covLR), str(error))
+						suffix = "_size_" + str(skippedExon) + "_abund_" + str(abundanceMajor) + "_cov_" + str(covLR) + "_err_" + str(error)
+						isCorrect = computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, covLR, covForFigs)
+						if isCorrect: # all reads were corrected to the right isoform
+							alignOnRefMsa(correc, skippedExon, abundanceMajor, currentDirectory, "/home/marchet/detection-consensus-isoform/results", covLR, error)
+							computeResultsRecallPrecision(correc, skippedExon, abundanceMajor, currentDirectory, correc, refIsoformTypesToSeq, outSize, covLR, error)
+			cmdMv = "mv " + currentDirectory + "/recall_tmp.txt " + currentDirectory + "/recall_cov_"+ str(covLR) + "_err_" + str(error) + ".txt"
+			subprocess.check_output(['bash','-c', cmdMv])
+			cmdMv = "mv " + currentDirectory + "/precision_tmp.txt " + currentDirectory + "/precision_cov_"+ str(covLR)+ "_err_" + str(error)  +".txt"
+			subprocess.check_output(['bash','-c', cmdMv])
+			outSize.close()
+			cmdMv = "mv " + currentDirectory + "/correct_base_rate_tmp.txt " + currentDirectory + "/correct_base_rate_cov_"+ str(covLR) + "_err_" + str(error) +".txt"
+			subprocess.check_output(['bash','-c', cmdMv])
+			cmdAwk = '''awk '{if($1=="msa_exon") {print$2, "recall",''' + str(covLR) + ''',''' +str(error)  + '''}}' ''' + currentDirectory + '''/recall_cov_'''+ str(covLR) + '''_err_''' + str(error) +'''.txt >>''' + currentDirectory +  '''/all_recall_precision.txt'''
+			print(cmdAwk)
+			subprocess.check_output(['bash','-c', cmdAwk])
+			cmdAwk = '''awk '{if($1=="msa_exon") {print$2, "precision",''' + str(covLR) + ''',''' +str(error) + '''}}' ''' + currentDirectory + '''/precision_cov_'''+ str(covLR) + '''_err_''' + str(error)+ '''.txt >>''' + currentDirectory +  '''/all_recall_precision.txt'''
+			print(cmdAwk)
+			subprocess.check_output(['bash','-c', cmdAwk])
+			cmdAwk = '''awk '{if($1=="msa_exon") {print$2, "correct",''' + str(covLR) + ''',''' +str(error) +'''}}' ''' + currentDirectory + '''/correct_base_rate_cov_'''+ str(covLR) + '''_err_''' + str(error)+ '''.txt >>''' + currentDirectory +  '''/all_recall_precision.txt'''
+			print(cmdAwk)
+			subprocess.check_output(['bash','-c', cmdAwk])
+		if error == errorRateToKeep:
+			printMetrics(currentDirectory, covForFigs)
+	printMetricErrorRates(currentDirectory, covForFigs)
+	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png", "coverage_function": currentDirectory + "/metrics_function_coverage.png", "errorrate_function" : currentDirectory + "/metrics_function_errorrate.png", "coverageToKeep": covForFigs}
 	writeTexIsoforms(currentDirectory, dictLatex)
-	writeLatex(dictLatex, currentDirectory)
+	writeLatex(dictLatex, currentDirectory, errorRate)
 
 if __name__ == '__main__':
 	main()

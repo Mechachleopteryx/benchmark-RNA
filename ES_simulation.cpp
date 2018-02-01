@@ -234,24 +234,28 @@ int main(int argc, char ** argv){
 		uint sizeSkippedExon(stoi(argv[1]));
 		uint inclusionAbundance(stoi(argv[2]));
 		string outSuffix("");
-		uint srCoverage(100), lrCoverage(10);
+		uint srCoverage(100), lrCoverage(10), errorRate(13);
 		if (argc > 3){
 			outSuffix = argv[3];
 			if (argc > 5){
 				srCoverage = stoi(argv[4]);
 				lrCoverage = stoi(argv[5]);
+				if (argc > 6){
+					errorRate = stoi(argv[6]);
+				}
 			}
+			
 		}
 		srand (time(NULL));
 		auto startChrono = chrono::system_clock::now();
 		// generate reference sequences for alternative transcripts
 		vector<string> transcripts(generateAlternativeTranscriptReferences(sizeSkippedExon));
 		// generate reads (long and short)
-		generateReads(inclusionAbundance, transcripts, outSuffix, srCoverage, lrCoverage);
+		generateReads(inclusionAbundance, transcripts, outSuffix, srCoverage, lrCoverage, errorRate);
 		auto end = chrono::system_clock::now(); auto waitedFor = end - startChrono;
 		cout << "Time  in ms : " << (chrono::duration_cast<chrono::milliseconds>(waitedFor).count()) << endl;
 	} else {
-		cout << "usage: ./ES_simulation <size skipped exon> <relative abudance inclusion isoform (%)> " << endl;
+		cout << "usage: ./ES_simulation <size skipped exon> <relative abudance inclusion isoform (%)> <error rate> " << endl;
 	}
 	return 0;
 }
