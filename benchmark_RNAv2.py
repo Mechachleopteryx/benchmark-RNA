@@ -53,16 +53,14 @@ def simulateReads(skipped, abund, coverage, EStype, currentDirectory, errorRate)
 						cmdRm = "rm " + currentDirectory + "/simulatedLR"+ suffix +".fa"
 						subprocess.check_output(['bash','-c', cmdRm])
 					if EStype == "ES":
-						print("go", sizeSkipped, relAbund, covLR)
 						cmdSimul = currentDirectory + "/ES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR) + " " + str(error)
 					elif EStype == "MES": #todo make error rate a parameter for this one
 						cmdSimul =  currentDirectory + "/MES_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) +  " " + str(covLR)
 					elif EStype == "alt":
 						cmdSimul =  currentDirectory + "/AltSE_simulation " + str(sizeSkipped) + " " + str(relAbund) + " " + str(suffix) + " " +  str(covSR) + " " + str(covLR) + " " + str(error)
 					cmdSimul = subprocessLauncher(cmdSimul)
-					
-					checkReadFiles(currentDirectory + "/simulatedLR"+ suffix +".fa"  )
-	
+					checkReadFiles(currentDirectory + "/simulatedLR"+ suffix +".fa")
+
 
 # return number of reads in a fasta
 def getFileReadNumber(fileName):
@@ -157,7 +155,8 @@ def makeCorrectedHeadersList(resultDirectory, currentDirectory, skipped, abund, 
 	return(correcIsoformTypesToCounts, correcIsoformTypesToSeq)
 
 #compute ratio of isoforms representations in ref and corrected files
-def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix):
+# todo files with reference correction ratio soft coverage errorrate 
+def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix, soft, coverage, errorRate):
 	counts = compareRefAndCorrectedHeaders(refIsoformTypesToCounts, correcIsoformTypesToCounts)
 	confusionName = currentDirectory + "/matrix_confusion" + suffix +  ".txt"
 	outConf = open(confusionName, 'w')
@@ -183,6 +182,9 @@ def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, cu
 		for ref2 in ratios[ref].keys():
 			meanRatio = sum(ratios[ref][ref2])/len(ratios[ref][ref2]) if len(ratios[ref][ref2]) > 0 else 0
 			outConf.write(ref + " " + ref2 + " " + str(meanRatio) + "\n")
+			cmdEcho = "echo " + ref + " " + ref2 + " " + str(meanRatio) + " " + soft + " " + str(coverage) + " " + str(errorRate) + " >> " + currentDirectory + "/all_confusion_matrix.txt"
+			subprocess.check_output(['bash','-c', cmdEcho])
+
 	outConf.close()
 	return confusionName, isCorrect
 
@@ -311,17 +313,17 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 
 #\textbf{\huge %(school)s \\}
 
-def writeTexIsoforms(currentDirectory, dictLatex):
-	listConfusion = getFiles(currentDirectory, "confusion*.png")
-	out = ''
-	coverage = dictLatex["coverage"]
-	for i,matrix in enumerate(listConfusion):
-		out += r'''\begin{figure}[ht!]
-	\centering\includegraphics[width=0.7\textwidth]{''' + matrix + r'''}
-	\caption{\textbf{Confusion matrix of isoforms, for coverage ''' + coverage + r'''X} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1.}
-	\label{fig:confusion''' + str(i) + '''}
-	\end{figure}'''
-	dictLatex["isoform"] = out
+#~ def writeTexIsoforms(currentDirectory, dictLatex):
+	#~ listConfusion = getFiles(currentDirectory, "confusion*.png")
+	#~ out = ''
+	#~ coverage = dictLatex["coverage"]
+	#~ for i,matrix in enumerate(listConfusion):
+		#~ out += r'''\begin{figure}[ht!]
+	#~ \centering\includegraphics[width=0.7\textwidth]{''' + matrix + r'''}
+	#~ \caption{\textbf{Confusion matrix of isoforms, for coverage ''' + coverage + r'''X} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1.}
+	#~ \label{fig:confusion''' + str(i) + '''}
+	#~ \end{figure}'''
+	#~ dictLatex["isoform"] = out
 
 
 
@@ -359,12 +361,25 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 	\label{fig:size}
 	\end{figure}
 
+	\section{Isoform correction}
+	
+	\begin{figure}[ht!]
+	 \centering\includegraphics[width=0.7\textwidth]{%(isoform)s}
+	 \caption{\textbf{Confusion matrix of isoforms, for coverage %(coverage)sX} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1. Confusion matrix are presented for each correction method.}
+	 \label{fig:confusionAll}
+	\end{figure}'''
+	
+	if len(errorRate) > 1:
+		content += r''' \subsection{Isoform conservation in function of coverage for exon method}
+			 \begin{figure}[ht!]
+		 \centering\includegraphics[width=0.7\textwidth]{%(isoformError)s}
+	 \caption{\textbf{Confusion matrix of isoforms, for coverage %(coverage)sX and exon correction method.} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1. Confusion matrix are presented for each tested error rate}
+	 \label{fig:confusionError}
+	\end{figure}
+	 '''
 
-	\section{Isoform detection}
-	%(isoform)s
 
-
-	 \section{Metrics in function of coverage}
+	content += r''' \section{Metrics in function of coverage}
 	 For the exon-correction solution.
 	 \begin{figure}[ht!]
 	\centering\includegraphics[width=0.8\textwidth]{%(coverage_function)s}
@@ -391,9 +406,23 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 
 
 #R functions
-def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix):
-	Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix.R " + confusionFile + " " + corrector  + " " + currentDirectory
+def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix, coverageToKeep, errorToKeep):
+	#~ Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix.R " + confusionFile + " " + corrector  + " " + currentDirectory
+	Rcmd = "Rscript " + currentDirectory + "/plot_all_confusion_matrix.R " + currentDirectory + "/all_confusion_matrix.txt " + currentDirectory + " " + str(coverageToKeep) + " " + str(errorToKeep)
 	subprocessLauncher(Rcmd)
+
+
+def printConfusionMatrixFunctionOf(currentDirectory, coverageToKeep, errorToKeep):
+	if errorToKeep is not None:
+		Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix_function_error.R " + currentDirectory + "/all_confusion_matrix.txt " + currentDirectory + " "  + str(coverageToKeep)
+		print(Rcmd)
+		input()
+		subprocessLauncher(Rcmd)
+	if coverageToKeep is not None:
+		Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix_function_coverage.R " + currentDirectory + "/all_confusion_matrix.txt " + currentDirectory + " "  + str(errorToKeep) 
+		subprocessLauncher(Rcmd)
+	#~ if len(coverage) > 1:
+	
 
 def printMetrics(currentDirectory, cov):
 	cmdR = "Rscript " + currentDirectory + "/plot_recall.R " + currentDirectory + "/recall_cov_" + str(cov) +".txt " + currentDirectory
@@ -412,12 +441,16 @@ def printMetricErrorRates(currentDirectory, cov):
 	cmdR = "Rscript " + currentDirectory + "/plot_all_metrics_errorrate.R " + currentDirectory + "/all_recall_precision.txt " + str(cov) + " " + currentDirectory
 	subprocessLauncher(cmdR)
 
-def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, cov, covToPrint, outDir="/home/marchet/detection-consensus-isoform/results"):
+def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, cov, covToPrint, allCoverages, errorRate, errorToPrint, allErrorRates, outDir="/home/marchet/detection-consensus-isoform/results"):
 	msa(suffix, correc)
 	correcIsoformTypesToCounts, correcIsoformTypesToSeq = makeCorrectedHeadersList(outDir, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts)
-	confusionFile, isCorrect = computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix)
-	if cov == covToPrint:
-		printConfusionMatrix(currentDirectory, correc, confusionFile, suffix)
+	confusionFile, isCorrect = computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix, correc, cov, errorRate)
+	if cov == covToPrint and errorRate == errorToPrint:
+		printConfusionMatrix(currentDirectory, correc, confusionFile, suffix, cov, errorRate)
+	#~ if len(allCoverages) > 1:
+		#~ printConfusionMatrixFunctionOf(currentDirectory, covToPrint, errorToPrint)
+	if len(allErrorRates) > 1:
+		printConfusionMatrixFunctionOf(currentDirectory, covToPrint, errorToPrint)
 	return isCorrect
 
 
@@ -446,8 +479,8 @@ def main():
 	skipped = [40,50,100]
 	#~ abund = [50,75,90,10]
 	#~ abund = [50,75,90]
-	#~ errorRate = [13,5]
-	errorRate = [13]
+	errorRate = [13,5]
+	#~ errorRate = [13]
 	errorRateToKeep = 13
 
 	abund = [50]
@@ -471,8 +504,17 @@ def main():
 	outputDirPath = args.outputDirPath
 	#~ covLR = args.covLR
 
-	
-	correctors = ["msa_isoform", "msa_exon"]
+	#order to keep for plots
+	#LoRMA",
+     #LoRDEC",
+     # "Proovread",
+     #"MECAT",
+     #"PBDagCon",
+     #"daccord",
+     #"msa_exon",
+     #"msa_isoform",
+     # "colorMap"
+	correctors = ["msa_exon","msa_isoform"]
 	#~ correctors = ["msa_isoform"]
 	#~ correctors = ["msa_exon"]
 	#~ correctors = ["msa_sparc"]
@@ -500,6 +542,8 @@ def main():
 
 	cmdFile = '''echo "value metric coverage error" > ''' + currentDirectory + '''/all_recall_precision.txt'''
 	subprocess.check_output(['bash','-c', cmdFile])
+	cmdFile = '''echo "reference correction ratio soft coverage error" > ''' + currentDirectory + '''/all_confusion_matrix.txt'''
+	subprocess.check_output(['bash','-c', cmdFile])
 	
 
 
@@ -515,7 +559,7 @@ def main():
 					for abundanceMajor in abundS:
 						listFilesPerfect, refIsoformTypesToCounts, refIsoformTypesToSeq = makeReferenceHeadersList(currentDirectory, str(skippedExon), str(abundanceMajor), str(covLR), str(error))
 						suffix = "_size_" + str(skippedExon) + "_abund_" + str(abundanceMajor) + "_cov_" + str(covLR) + "_err_" + str(error)
-						isCorrect = computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, covLR, covForFigs)
+						isCorrect = computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor, suffix, refIsoformTypesToCounts, covLR, covForFigs, coverage, error,errorRateToKeep, errorRate)
 						if isCorrect: # all reads were corrected to the right isoform
 							alignOnRefMsa(correc, skippedExon, abundanceMajor, currentDirectory, "/home/marchet/detection-consensus-isoform/results", covLR, error)
 							computeResultsRecallPrecision(correc, skippedExon, abundanceMajor, currentDirectory, correc, refIsoformTypesToSeq, outSize, covLR, error)
@@ -538,8 +582,8 @@ def main():
 		if error == errorRateToKeep:
 			printMetrics(currentDirectory, covForFigs)
 	printMetricErrorRates(currentDirectory, covForFigs)
-	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png", "coverage_function": currentDirectory + "/metrics_function_coverage.png", "errorrate_function" : currentDirectory + "/metrics_function_errorrate.png", "coverageToKeep": covForFigs}
-	writeTexIsoforms(currentDirectory, dictLatex)
+	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png", "coverage_function": currentDirectory + "/metrics_function_coverage.png", "errorrate_function" : currentDirectory + "/metrics_function_errorrate.png", "coverageToKeep": covForFigs, "isoform": currentDirectory + "/all_confusion_matrix.png", "isoformError": currentDirectory+"/confusion_matrix_function_error.png"}
+	#~ writeTexIsoforms(currentDirectory, dictLatex)
 	writeLatex(dictLatex, currentDirectory, errorRate, outputDirPath, outputPDFName)
 
 if __name__ == '__main__':
