@@ -107,6 +107,8 @@ def msa(suffix, msaType,outDir = "/home/marchet/detection-consensus-isoform/resu
 		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py -r simulatedLR" + suffix + ".fa "
 	elif msaType == "msa_sparc":
 		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py -r simulatedLR" + suffix + ".fa -s True"
+	elif msaType == "msa_both":
+		cmdMSA = "/home/marchet/detection-consensus-isoform/analyze_MSAv2.py -r simulatedLR" + suffix + ".fa -c both"
 	p = subprocessLauncher(cmdMSA)
 
 # headers of corrected reads file
@@ -169,7 +171,6 @@ def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, cu
 				ratio = counts[ref][ref2] * 1.0 / len(refIsoformTypesToCounts[ref]) if len(refIsoformTypesToCounts[ref]) != 0 else 0
 				if ratio != 1:
 					isCorrect = False
-				#~ outConf.write(ref + " " + ref2 + " " + str(ratio) + "\n")
 				if ref in ratios.keys():
 					if ref2 in ratios[ref].keys():
 						ratios[ref][ref2].append(ratio)
@@ -179,11 +180,16 @@ def computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, cu
 					ratios[ref] = dict()
 					ratios[ref][ref2] = [ratio]
 	for ref in ratios.keys():
-		for ref2 in ratios[ref].keys():
-			meanRatio = sum(ratios[ref][ref2])/len(ratios[ref][ref2]) if len(ratios[ref][ref2]) > 0 else 0
-			outConf.write(ref + " " + ref2 + " " + str(meanRatio) + "\n")
-			cmdEcho = "echo " + ref + " " + ref2 + " " + str(meanRatio) + " " + soft + " " + str(coverage) + " " + str(errorRate) + " >> " + currentDirectory + "/all_confusion_matrix.txt"
-			subprocess.check_output(['bash','-c', cmdEcho])
+		for ref2 in ratios.keys():
+			if ref2 in ratios[ref].keys():
+				meanRatio = sum(ratios[ref][ref2])/len(ratios[ref][ref2]) if len(ratios[ref][ref2]) > 0 else 0
+				outConf.write(ref + " " + ref2 + " " + str(meanRatio) + "\n")
+				cmdEcho = "echo " + ref + " " + ref2 + " " + str(meanRatio) + " " + soft + " " + str(coverage) + " " + str(errorRate) + " >> " + currentDirectory + "/all_confusion_matrix.txt"
+				subprocess.check_output(['bash','-c', cmdEcho])
+			else:
+				outConf.write(ref + " " + ref2 + " 0\n")
+				cmdEcho = "echo " + ref + " " + ref2 + " 0 " + soft + " " + str(coverage) + " " + str(errorRate) + " >> " + currentDirectory + "/all_confusion_matrix.txt"
+				subprocess.check_output(['bash','-c', cmdEcho])
 
 	outConf.close()
 	return confusionName, isCorrect
@@ -311,23 +317,10 @@ def computeResultsRecallPrecision(corrector, skipped, abund, currentDirectory, s
 
 
 
-#\textbf{\huge %(school)s \\}
-
-#~ def writeTexIsoforms(currentDirectory, dictLatex):
-	#~ listConfusion = getFiles(currentDirectory, "confusion*.png")
-	#~ out = ''
-	#~ coverage = dictLatex["coverage"]
-	#~ for i,matrix in enumerate(listConfusion):
-		#~ out += r'''\begin{figure}[ht!]
-	#~ \centering\includegraphics[width=0.7\textwidth]{''' + matrix + r'''}
-	#~ \caption{\textbf{Confusion matrix of isoforms, for coverage ''' + coverage + r'''X} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1.}
-	#~ \label{fig:confusion''' + str(i) + '''}
-	#~ \end{figure}'''
-	#~ dictLatex["isoform"] = out
 
 
 
-def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
+def writeLatex(options, currentDirectory, errorRate, coverage, outDir, outputPDFName):
 	content = r'''\documentclass{article}
 	\usepackage{graphicx}
 
@@ -336,20 +329,20 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 	\section{Recall, precision, correct bases rate}
 	\begin{figure}[ht!]
 	\centering\includegraphics[width=0.8\textwidth]{%(recall)s}
-	\caption{\textbf{Recall of correctors on %(coverage)sX reads} Recall values in ordinate are computed after correction for each read experiment, using correctors in absciss.}
+	\caption{\textbf{Recall of correctors on %(coverageToKeep)sX reads} Recall values in ordinate are computed after correction for each read experiment, using correctors in absciss. Error rate was %(errorToKeep)s)}
 	\label{fig:recall}
 	\end{figure}
 	
 	\begin{figure}[ht!]
 	\centering\includegraphics[width=0.8\textwidth]{%(precision)s}
-	\caption{\textbf{Precision of correctors on %(coverage)sX reads} Precision values in ordinate are computed after correction for each read experiment, using correctors in absciss.}
+	\caption{\textbf{Precision of correctors on %(coverageToKeep)sX reads} Precision values in ordinate are computed after correction for each read experiment, using correctors in absciss. Error rate was %(errorToKeep)}
 	\label{fig:precision}
 	\end{figure}
 
 	
 	\begin{figure}[ht!]
 	\centering\includegraphics[width=0.8\textwidth]{%(correctRate)s}
-	\caption{\textbf{Correct base rate after correction on %(coverage)sX reads} Correct base rate in ordinate, computed after correction for each read experiment, using correctors in absciss.}
+	\caption{\textbf{Correct base rate after correction on %(coverageToKeep)sX reads} Correct base rate in ordinate, computed after correction for each read experiment, using correctors in absciss. Error rate was %(errorToKeep)}
 	\label{fig:correctRate}
 	\end{figure}
 
@@ -357,7 +350,7 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 
 	\begin{figure}[ht!]
 	\centering\includegraphics[width=0.8\textwidth]{%(size)s}
-	\caption{\textbf{Ratio of corrected over real isoform length in corrected reads} Coverage of %(coverage)sX, ratio in ordinate, corrector in absciss.}
+	\caption{\textbf{Ratio of corrected over real isoform length in corrected reads} Coverage of %(coverageToKeep)sX, ratio in ordinate, corrector in absciss. Error rate was %(errorToKeep)}
 	\label{fig:size}
 	\end{figure}
 
@@ -365,12 +358,12 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 	
 	\begin{figure}[ht!]
 	 \centering\includegraphics[width=0.7\textwidth]{%(isoform)s}
-	 \caption{\textbf{Confusion matrix of isoforms, for coverage %(coverage)sX} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1. Confusion matrix are presented for each correction method.}
+	 \caption{\textbf{Confusion matrix of isoforms, for coverage %(coverageToKeep)sX} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1. Confusion matrix are presented for each correction method.}
 	 \label{fig:confusionAll}
 	\end{figure}'''
 	
 	if len(errorRate) > 1:
-		content += r''' \subsection{Isoform conservation in function of coverage for exon method}
+		content += r''' \subsection{Isoform conservation in function of error rate for exon method}
 			 \begin{figure}[ht!]
 		 \centering\includegraphics[width=0.7\textwidth]{%(isoformError)s}
 	 \caption{\textbf{Confusion matrix of isoforms, for coverage %(coverage)sX and exon correction method.} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1. Confusion matrix are presented for each tested error rate}
@@ -378,9 +371,18 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 	\end{figure}
 	 '''
 
+	if len(coverage) > 1:
+				content += r''' \subsection{Isoform conservation in function of coverage for exon method}
+				\begin{figure}[ht!]
+				\centering\includegraphics[width=0.7\textwidth]{%(isoformCoverage)s}
+				 \caption{\textbf{Confusion matrix of isoforms, for an error rate of %(errorToKeep)s and exon correction method.} Original isoforms are in absciss, corrected isoforms are in ordinate. For each pair we compute the number of corrected reads in a given isoform / original number of isoform. If no isoform was transformed during correction, the ratio is 1. Confusion matrix are presented for each tested coverage}
+				 \label{fig:confusionError}
+				\end{figure}
+				 '''
+		
 
-	content += r''' \section{Metrics in function of coverage}
-	 For the exon-correction solution.
+	content += r''' \section{Metrics in function of coverage for the exon-correction solution.}
+	 
 	 \begin{figure}[ht!]
 	\centering\includegraphics[width=0.8\textwidth]{%(coverage_function)s}
 	\caption{\textbf{Correction quality over coverage for correction by exon solution} Precision, recall and correct base ratio are colored bars. Coverages increase in the absciss.}
@@ -388,7 +390,7 @@ def writeLatex(options, currentDirectory, errorRate, outDir, outputPDFName):
 	\end{figure}'''
 
 	if len(errorRate) > 1:
-		content += r''' \section{Metrics in function of error rate}
+		content += r''' \section{Metrics in function of error rate for the exon-correction solution.}
 		 \begin{figure}[ht!]
 		\centering\includegraphics[width=0.8\textwidth]{%(errorrate_function)s}
 		\caption{\textbf{Correction quality over error rates for correction by exon solution} Precision, recall and correct base ratio are colored bars. Error rates increase in the absciss. Computed for a coverage of %(coverageToKeep)s.}
@@ -415,23 +417,20 @@ def printConfusionMatrix(currentDirectory, corrector, confusionFile, suffix, cov
 def printConfusionMatrixFunctionOf(currentDirectory, coverageToKeep, errorToKeep):
 	if errorToKeep is not None:
 		Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix_function_error.R " + currentDirectory + "/all_confusion_matrix.txt " + currentDirectory + " "  + str(coverageToKeep)
-		print(Rcmd)
-		input()
 		subprocessLauncher(Rcmd)
 	if coverageToKeep is not None:
 		Rcmd = "Rscript " + currentDirectory + "/plot_confusion_matrix_function_coverage.R " + currentDirectory + "/all_confusion_matrix.txt " + currentDirectory + " "  + str(errorToKeep) 
 		subprocessLauncher(Rcmd)
-	#~ if len(coverage) > 1:
 	
 
-def printMetrics(currentDirectory, cov):
-	cmdR = "Rscript " + currentDirectory + "/plot_recall.R " + currentDirectory + "/recall_cov_" + str(cov) +".txt " + currentDirectory
+def printMetrics(currentDirectory, cov, error):
+	cmdR = "Rscript " + currentDirectory + "/plot_recall.R " + currentDirectory + "/recall_cov_" + str(cov) + "_err_" + str(error) + ".txt " + currentDirectory
 	subprocessLauncher(cmdR)
-	cmdR = "Rscript " + currentDirectory + "/plot_precision.R " + currentDirectory + "/precision_cov_" + str(cov) +".txt " + currentDirectory
+	cmdR = "Rscript " + currentDirectory + "/plot_precision.R " + currentDirectory + "/precision_cov_" + str(cov) + "_err_" + str(error) +".txt " + currentDirectory
 	subprocessLauncher(cmdR)
-	cmdR = "Rscript " + currentDirectory + "/plot_correct_base_rate.R " + currentDirectory + "/correct_base_rate_cov_" + str(cov) +".txt " + currentDirectory
+	cmdR = "Rscript " + currentDirectory + "/plot_correct_base_rate.R " + currentDirectory + "/correct_base_rate_cov_" + str(cov)  + "_err_" + str(error) +".txt " + currentDirectory
 	subprocessLauncher(cmdR)
-	cmdR = "Rscript " + currentDirectory + "/plot_size.R " + currentDirectory + "/sizes_reads_cov_" + str(cov) +".txt " + currentDirectory
+	cmdR = "Rscript " + currentDirectory + "/plot_size.R " + currentDirectory + "/sizes_reads_cov_" + str(cov) + "_err_" + str(error) +".txt " + currentDirectory
 	subprocessLauncher(cmdR)
 	cmdR = "Rscript " + currentDirectory + "/plot_all_metrics_coverage.R " + currentDirectory + "/all_recall_precision.txt " + currentDirectory
 	subprocessLauncher(cmdR)
@@ -447,8 +446,8 @@ def computeResultsIsoforms(correc, currentDirectory, skippedExon, abundanceMajor
 	confusionFile, isCorrect = computeRatioIsoforms(refIsoformTypesToCounts, correcIsoformTypesToCounts, currentDirectory, suffix, correc, cov, errorRate)
 	if cov == covToPrint and errorRate == errorToPrint:
 		printConfusionMatrix(currentDirectory, correc, confusionFile, suffix, cov, errorRate)
-	#~ if len(allCoverages) > 1:
-		#~ printConfusionMatrixFunctionOf(currentDirectory, covToPrint, errorToPrint)
+	if len(allCoverages) > 1:
+		printConfusionMatrixFunctionOf(currentDirectory, covToPrint, errorToPrint)
 	if len(allErrorRates) > 1:
 		printConfusionMatrixFunctionOf(currentDirectory, covToPrint, errorToPrint)
 	return isCorrect
@@ -476,14 +475,15 @@ def main():
 	print(currentDirectory)
 	
 	covSR = 1
-	skipped = [40,50,100]
+	#~ skipped = [40,50,100]
+	skipped = [100]
 	#~ abund = [50,75,90,10]
 	#~ abund = [50,75,90]
-	errorRate = [13,5]
-	#~ errorRate = [13]
+	#~ errorRate = [13,5]
+	errorRate = [5,9,13,15]
 	errorRateToKeep = 13
 
-	abund = [50]
+	abund = [50,75,90]
 	#~ skipped = [100]
 	skippedS = [str(r) for r in skipped]
 	abundS = [str(r) for r in abund]
@@ -513,18 +513,20 @@ def main():
      #"daccord",
      #"msa_exon",
      #"msa_isoform",
+     #msa_both
      # "colorMap"
-	correctors = ["msa_exon","msa_isoform"]
+	#~ correctors = ["msa_exon","msa_isoform"]
 	#~ correctors = ["msa_isoform"]
-	#~ correctors = ["msa_exon"]
+	correctors = ["msa_exon", "msa_isoform", "msa_both"]
+	#~ correctors = ["msa_both"]
 	#~ correctors = ["msa_sparc"]
 	if args.coverage is not None:
 		coverage = [args.coverage]
 	else:
-		coverage = [15]
+		#~ coverage = [15]
 		#~ coverage = [5, 10, 15, 20, 30, 50, 100]
 		#~ coverage = [10, 15, 20, 30, 50]
-		#~ coverage = [10, 15, 20]
+		coverage = [10, 15, 20]
 	covForFigs = 15
 	if not outputDirPath is None:
 		if not os.path.exists(outputDirPath):
@@ -579,12 +581,11 @@ def main():
 			cmdAwk = '''awk '{if($1=="msa_exon") {print$2, "correct",''' + str(covLR) + ''',''' +str(error) +'''}}' ''' + currentDirectory + '''/correct_base_rate_cov_'''+ str(covLR) + '''_err_''' + str(error)+ '''.txt >>''' + currentDirectory +  '''/all_recall_precision.txt'''
 			print(cmdAwk)
 			subprocess.check_output(['bash','-c', cmdAwk])
-		if error == errorRateToKeep:
-			printMetrics(currentDirectory, covForFigs)
+			if error == errorRateToKeep and covLR == covForFigs:
+				printMetrics(currentDirectory, covForFigs, errorRateToKeep)
 	printMetricErrorRates(currentDirectory, covForFigs)
-	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png", "coverage_function": currentDirectory + "/metrics_function_coverage.png", "errorrate_function" : currentDirectory + "/metrics_function_errorrate.png", "coverageToKeep": covForFigs, "isoform": currentDirectory + "/all_confusion_matrix.png", "isoformError": currentDirectory+"/confusion_matrix_function_error.png"}
-	#~ writeTexIsoforms(currentDirectory, dictLatex)
-	writeLatex(dictLatex, currentDirectory, errorRate, outputDirPath, outputPDFName)
+	dictLatex = {"coverage":str(covLR), "recall": currentDirectory + "/recall.png", "precision": currentDirectory + "/precision.png", "correctRate": currentDirectory + "/correct_base_rate.png", "size":  currentDirectory + "/size.png", "coverage_function": currentDirectory + "/metrics_function_coverage.png", "errorrate_function" : currentDirectory + "/metrics_function_errorrate.png", "coverageToKeep": covForFigs, "errorToKeep": errorRateToKeep, "isoform": currentDirectory + "/all_confusion_matrix.png", "isoformError": currentDirectory+"/confusion_matrix_function_error.png", "isoformCoverage": currentDirectory+"/confusion_matrix_function_coverage.png"}
+	writeLatex(dictLatex, currentDirectory, errorRate, coverage, outputDirPath, outputPDFName)
 
 if __name__ == '__main__':
 	main()
