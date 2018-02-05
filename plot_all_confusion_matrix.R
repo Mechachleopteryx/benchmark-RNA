@@ -29,6 +29,7 @@ label_names <- c(
                     `daccord` = "daccord",
                     `msa_exon` = "msa_exon",
                     `msa_isoform` = "msa_isoform",
+                    `msa_isoform` = "msa_ŝparc",
                     `msa_both` = "msa_both",
                     `colorMap` = "colorMap"
                     )

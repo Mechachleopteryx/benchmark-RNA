@@ -103,7 +103,7 @@ def colormap(suffix):
 def lorma(suffix):
 	cmdcp = "cp simulatedLR" + suffix + ".fa copy.fa"
 	subprocess.check_output(['bash','-c', cmdcp])
-	cmdLorma = "lorma.sh -threads 4 copy.fa -s"
+	cmdLorma = "/home/marchet/bin/LoRMA-0.4/build/lorma.sh -threads 4 copy.fa -s"
 	p = subprocessLauncher(cmdLorma)
 	try:
 		cmdmv = "mv trim.fasta corrected_by_LoRMA" + suffix + ".fa"
